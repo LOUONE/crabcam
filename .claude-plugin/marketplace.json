@@ -19,7 +19,7 @@
       "name": "savvy-progress",
       "source": "./plugins/savvy-progress",
       "description": "Mod: progress bar and a live agents panel: each subagent's real tool calls, files and phases at no token cost, plus an optional Haiku narrator; made for savvy-flow.",
-      "version": "1.4.0",
+      "version": "1.5.0",
       "category": "mod"
     },
     {

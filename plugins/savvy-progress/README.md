@@ -34,6 +34,6 @@ Cost is a rough estimate from token counts and a built-in per-model price table 
 
 `stepReports`: `off` (default) or `on`; see Live activity and Details.
 
-`autoOpen`: `savvy` (default) or `any`. With `savvy` the panel opens by itself when a `savvy-*` worker starts or a plan is reported. With `any` it also opens, once per session, when any other subagent starts. `/agents-info` toggles it either way.
+`autoOpen`: `always` (default), `savvy` or `any`. With `always` the panel opens whenever a subagent starts (any type, not only savvy-flow workers) and it is closed, so closing it is never for long. `savvy` and `any` keep the old rule: once per flow. Whatever the setting, while there are subagents and no savvy-flow plan, a line above the prompt reads `Agents · 2 running` with **Show panel ›**, which opens it in one press; its ✕ hides the line until the next subagent starts. `/agents-info open` does the same from the prompt.
 
 Install instructions are in the [repository README](../../README.md).

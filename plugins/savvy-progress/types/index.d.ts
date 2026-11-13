@@ -78,6 +78,8 @@ export type Panel = {
   isCompact: boolean
   isDoneCollapsed: boolean
   isLogOpen?: boolean
+  /** How many agents there were when the band's agents line was dismissed; one more brings it back. */
+  bandHiddenAfter?: number
   /** The agent open in detail, by its run id. */
   selected?: string
   autoOpenedFor: string

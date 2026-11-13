@@ -94,6 +94,7 @@ const STRINGS = {
     k_web: "Web",
     k_agent: "Delegating",
     k_other: "Other",
+    show: "Show panel",
     actions: "actions",
     progress: "Progress",
     more: "more",
@@ -147,6 +148,7 @@ const STRINGS = {
     k_web: "Web",
     k_agent: "Délègue",
     k_other: "Autre",
+    show: "Afficher le panneau",
     actions: "actions",
     progress: "Progression",
     more: "autres",
@@ -200,6 +202,7 @@ const STRINGS = {
     k_web: "Веб",
     k_agent: "Делегирует",
     k_other: "Другое",
+    show: "Открыть панель",
     actions: "действий",
     progress: "Ход работы",
     more: "ещё",
@@ -253,6 +256,7 @@ const STRINGS = {
     k_web: "רשת",
     k_agent: "מאציל",
     k_other: "אחר",
+    show: "הצג חלונית",
     actions: "פעולות",
     progress: "התקדמות",
     more: "נוספים",
@@ -1320,6 +1324,36 @@ async function togglePane($: EngineInterface): Promise<boolean> {
   return true
 }
 
+// Opens the pane, or brings it forward when it is behind another tab.
+async function showPane($: EngineInterface): Promise<void> {
+  const at = await $.clock.now()
+  await update($, now, () => at)
+  await $.ui.open({ id: PANE, title: tr().pane })
+}
+
+// The band's line without a flow: the crab, walking while an agent works, and the crew.
+const bandSvg = (W: number, text: string, isWorking: boolean): string => {
+  const rtl = isRtl()
+  const at = rtl ? `x="${W - 32}" direction="rtl" text-anchor="start"` : 'x="32"'
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+<style>.t{fill:#1f1f1f}@media (prefers-color-scheme: dark){.t{fill:#ececec}}</style>
+${CRAB_CSS}${crab(rtl ? W - 25 : 1, 0, 'other', false, isWorking, 0.8, rtl)}
+<text class="t" ${at} y="${H / 2 + 4.5}" font-family="${FONT}" font-size="13" font-weight="500">${xml(text)}</text>
+</svg>`
+}
+
+// Opens the pane unless it is up already: the default, so every subagent brings it back.
+async function openIfClosed($: EngineInterface): Promise<void> {
+  // Never let the panel's bookkeeping fail the caller (a worker launch, a progress report).
+  let isOpen = false
+  try {
+    isOpen = (await $.ui.panes()).some(p => p.id === PANE)
+  } catch {
+    // Unknown: open it; opening a pane that is up only brings it forward.
+  }
+  if (!isOpen) void Promise.resolve($.ui.open({ id: PANE, title: tr().pane })).catch(() => undefined)
+}
+
 async function autoOpen($: EngineInterface, key: string): Promise<void> {
   const p = await read($, panel)
   if (p.autoOpenedFor === key) return
@@ -1329,6 +1363,9 @@ async function autoOpen($: EngineInterface, key: string): Promise<void> {
 
 export const register: Register = (on, options) => {
   // `narrator` option: 'selected' (default) narrates the agent open in detail, 'all' every agent, 'off' none.
+  // `autoOpen`: 'always' (default) opens the pane whenever a subagent starts and it is closed;
+  // 'savvy' and 'any' open it once per flow, as before.
+  const isOncePerFlow = (): boolean => options.autoOpen === 'savvy' || options.autoOpen === 'any'
   const narratorMode = (): 'selected' | 'all' | 'off' =>
     options.narrator === 'off' || options.narrator === 'all' ? options.narrator : 'selected'
   on('session.start', async ($, e, next) => {
@@ -1462,7 +1499,7 @@ export const register: Register = (on, options) => {
       await update($, agents, list => list.filter(a => a.status === 'running'))
     }
     const next = await update($, flow, p => merge(p, input))
-    if (next && input.tasks?.length) await autoOpen($, next.title)
+    if (next && input.tasks?.length) await (isOncePerFlow() ? autoOpen($, next.title) : openIfClosed($))
     return { result: `ok: ${label(next ?? blank())}` }
   })
 
@@ -1527,7 +1564,9 @@ export const register: Register = (on, options) => {
       return [...list.filter(a => a.id !== run.id), run].slice(-200)
     })
     await update($, now, () => at)
-    if (e.subagentType.startsWith('savvy-')) {
+    if (!isOncePerFlow()) {
+      await openIfClosed($)
+    } else if (e.subagentType.startsWith('savvy-')) {
       const f = await read($, flow)
       await autoOpen($, f && !f.isFinished ? f.title : 'savvy-flow')
     } else if (options.autoOpen === 'any') {
@@ -1944,7 +1983,56 @@ export const register: Register = (on, options) => {
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const f = await read($, flow)
-    if (f === null || e.props.hasSurvey) return next(e)
+    if (e.props.hasSurvey) return next(e)
+    if (f === null) {
+      // No savvy-flow plan: while there are subagents, a line that opens the panel in one press.
+      const list = await read($, agents)
+      const pp = await read($, panel)
+      if (list.length <= (pp.bandHiddenAfter ?? 0)) return next(e)
+      const drawn = await Promise.resolve(next(e)).catch(() => null)
+      const below = drawn && typeof drawn === 'object' && (drawn as { type?: string }).type !== 'engine' ? drawn : null
+      const s = tr()
+      const ui = $.ui.resolve(e)
+      const { Box, Text, Button } = ui
+      const runningN = list.filter(a => a.status === 'running').length
+      const doneN = list.length - runningN
+      const text = `${s.pane} · ${runningN} ${s.busy}${doneN ? ` · ${doneN} ${s.finished.toLowerCase()}` : ''}`
+      const openButton = <Button key="savvy-open" label={`${s.show} ›`} plain onPress={() => showPane($)} />
+      const hide = (
+        <Button
+          key="savvy-band-hide"
+          label="✕"
+          plain
+          role="dismiss"
+          onPress={() => update($, panel, prev => ({ ...prev, bandHiddenAfter: list.length }))}
+        />
+      )
+      if (e.surface !== 'terminal' && 'Svg' in ui) {
+        const { Svg } = ui
+        const width = Math.max(160, Math.min(560, Math.round(textWidth(text, 13) + 56)))
+        return (
+          <Box flexDirection="column">
+            <Box flexDirection={isRtl() ? 'row-reverse' : 'row'} alignItems="center" gap={1}>
+              <Svg source={bandSvg(width, text, runningN > 0)} alt={text} width={width} height={H} />
+              {openButton}
+              {hide}
+            </Box>
+            {below}
+          </Box>
+        )
+      }
+      return (
+        <Box flexDirection="column">
+          <Box flexDirection="row" gap={2}>
+            <Text color={CLAY}>▣</Text>
+            <Text wrap="truncate-end">{text}</Text>
+            {openButton}
+            {hide}
+          </Box>
+          {below}
+        </Box>
+      )
+    }
     // Draw this row with the other mods' bands beneath it. Claude Code's own placeholder ({ type: 'engine' }) is
     // never nested: the desktop drops a band that nests it.
     const drawn = await Promise.resolve(next(e)).catch(() => null)
