@@ -1,6 +1,6 @@
 # crabcam
 
-A fork of [johnnyvizz/claude-kit](https://github.com/johnnyvizz/claude-kit). The one change is in **savvy-progress**: the agents panel shows what each subagent is actually doing (`▸ Bash npm test`, `▸ Read src/foo.ts`), read from Claude Code's own tool-call events, so it costs no tokens. Worker step reports, which did cost tokens, are off by default. See [plugins/savvy-progress](plugins/savvy-progress/README.md#live-activity-130).
+A fork of [johnnyvizz/claude-kit](https://github.com/johnnyvizz/claude-kit). The one change is in **savvy-progress**: the agents panel shows what each subagent is actually doing, read from Claude Code's own tool-call events, so it costs no tokens. **Details ›** opens one agent: its phase, the files it touches, its timeline, and an optional one-line Haiku summary (≈ $0.0001 each). Worker step reports, which did cost tokens, are off by default. See [plugins/savvy-progress](plugins/savvy-progress/README.md#live-activity-and-details-140).
 
 A daily GitHub Action merges upstream into `main`, so upstream updates arrive here on their own; a conflict opens an issue instead.
 

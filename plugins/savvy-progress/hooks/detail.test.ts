@@ -24,21 +24,36 @@ const worker = async ($: Engine, on: On) => {
   return calls
 }
 
-for (const surface of ['terminal', 'desktop'] as const) {
-  test(`${surface}: Details opens one agent with its files, timeline and phase`, async ($, on) => {
-    await worker($, on)
-    const ui = await $.ui.mount({ plugin: PLUGIN, surface, component: 'Pane', requestId: 'savvy-agents', props: pane })
-    await ui.press({ key: 'd-a1' })
+test('terminal: Details opens one agent with its files, timeline and phase', async ($, on) => {
+  await worker($, on)
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: 'savvy-agents', props: pane })
+  await ui.press({ key: 'd-a1' })
 
-    expect(await ui.find({ type: 'Text', text: /src\/foo\.ts/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /1× (read|lu)/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /npm test/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /Running|Exécute/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /src\/foo\.ts/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /1× (read|lu)/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /npm test/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Running|Exécute/ })).toBeDefined()
 
-    await ui.press({ key: 'back' })
-    expect(await ui.find({ key: 'd-a1' })).toBeDefined()
-  })
-}
+  await ui.press({ key: 'back' })
+  expect(await ui.find({ key: 'd-a1' })).toBeDefined()
+})
+
+test('desktop: Details draws the hero, files and timeline cards', async ($, on) => {
+  await worker($, on)
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'desktop', component: 'Pane', requestId: 'savvy-agents', props: pane })
+  await ui.press({ key: 'd-a1' })
+
+  // Svg cards carry their drawing in `source` and a summary in `alt`.
+  const svgs = (await ui.findAll({ type: 'Svg' })).map(el => `${String(el.props.alt)}\n${String(el.props.source)}`)
+  const all = svgs.join('\n')
+  expect(all).toMatch(/Fix the parser/)
+  expect(all).toMatch(/foo\.ts/)
+  expect(all).toMatch(/npm test/)
+  expect(svgs.length).toBeGreaterThanOrEqual(4)
+
+  await ui.press({ key: 'back' })
+  expect(await ui.find({ key: 'd-a1' })).toBeDefined()
+})
 
 test('narrator: opening an agent asks Haiku once and shows its sentence', async ($, on) => {
   const calls = await worker($, on)

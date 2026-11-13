@@ -94,6 +94,9 @@ const STRINGS = {
     k_web: "Web",
     k_agent: "Delegating",
     k_other: "Other",
+    actions: "actions",
+    progress: "Progress",
+    more: "more",
     ctx: 'ctx',
     tier: { light: 'light', medium: 'medium', careful: 'careful', heavy: 'heavy', fable: 'fable', other: 'other' },
     effort: { low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' },
@@ -144,6 +147,9 @@ const STRINGS = {
     k_web: "Web",
     k_agent: "Délègue",
     k_other: "Autre",
+    actions: "actions",
+    progress: "Progression",
+    more: "autres",
     ctx: 'ctx',
     tier: { light: 'light', medium: 'medium', careful: 'careful', heavy: 'heavy', fable: 'fable', other: 'autre' },
     effort: { low: 'bas', medium: 'moyen', high: 'haut', xhigh: 'très haut', max: 'max' },
@@ -194,6 +200,9 @@ const STRINGS = {
     k_web: "Веб",
     k_agent: "Делегирует",
     k_other: "Другое",
+    actions: "действий",
+    progress: "Ход работы",
+    more: "ещё",
     ctx: 'ctx',
     tier: { light: 'light', medium: 'medium', careful: 'careful', heavy: 'heavy', fable: 'fable', other: 'other' },
     effort: { low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' },
@@ -244,6 +253,9 @@ const STRINGS = {
     k_web: "רשת",
     k_agent: "מאציל",
     k_other: "אחר",
+    actions: "פעולות",
+    progress: "התקדמות",
+    more: "נוספים",
     ctx: 'הקשר',
     tier: { light: 'קל', medium: 'בינוני', careful: 'זהיר', heavy: 'כבד', fable: 'פייבל', other: 'אחר' },
     effort: { low: 'נמוך', medium: 'בינוני', high: 'גבוה', xhigh: 'גבוה מאוד', max: 'מקסימלי' },
@@ -1052,6 +1064,202 @@ ${log}
   )
 }
 
+// --- Details on the desktop: one card per part, drawn as SVG like the rest of the panel.
+// Drawing costs nothing: only the narrator's sentence ever comes from a model.
+const DETAIL_CSS = `<style>
+.card{fill:#fbfaf8;stroke:#e6e5e1}.chip{fill:#f1f0ec}
+@media (prefers-color-scheme: dark){.card{fill:#1e1e1d;stroke:#34342f}.chip{fill:#2a2a28}}
+</style>`
+
+const cardSvg = (W: number, H: number, body: string): string =>
+  svg(W, H, `${DETAIL_CSS}<rect class="card" x="0.5" y="0.5" width="${W - 1}" height="${H - 1}" rx="12"/>${body}`)
+
+// Splits text into lines that fit `maxW`, at most `maxLines`, the last cut with an ellipsis.
+const wrapText = (text: string, size: number, maxW: number, maxLines: number): string[] => {
+  const words = text.split(/\s+/).filter(Boolean)
+  const lines: string[] = []
+  let cur = ''
+  let used = 0
+  for (const w of words) {
+    const tryLine = cur ? `${cur} ${w}` : w
+    if (!cur || textWidth(tryLine, size) <= maxW) {
+      cur = tryLine
+      used++
+      continue
+    }
+    lines.push(cur)
+    if (lines.length === maxLines) break
+    cur = w
+    used++
+  }
+  if (cur && lines.length < maxLines) lines.push(cur)
+  if (used < words.length && lines.length) lines[lines.length - 1] = `${lines[lines.length - 1]} …`
+  return lines.map(l => fitText(l, size, maxW))
+}
+
+const cardTitle = (W: number, text: string, right = ''): string =>
+  `<text class="t" ${startText(W, 16, 24)} font-family="${FONT}" font-size="12.5" font-weight="600">${xml(text)}</text>` +
+  (right ? `<text class="m" ${endText(W, W - 16, 24)} font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${xml(right)}</text>` : '')
+
+// The agent: its crab, name, model, the phase it is in and its numbers.
+const heroSvg = (W: number, a: AgentRun, at: number): [string, number] => {
+  const H = 116
+  const s = tr()
+  const tier = tierOf(a.type)
+  const color = colorOf(tier)
+  const evs = eventsOf(a)
+  const phase = phaseOf(a)
+  const word = a.status === 'running' ? s.isRunning : a.status === 'done' ? s.isFinished : s.failed
+  const meta = `${tier === 'other' ? a.type : tierWord(tier)}  ·  ${runModel(a)}  ·  ${word}`
+  let pill = ''
+  if (phase) {
+    const label = `${KIND_GLYPH[phase.kind]}  ${kindWord(phase.kind)} · ${fmtTime(Math.max(0, at - phase.since))}`
+    const pw = Math.round(textWidth(label, 11.5) + 24)
+    const last = evs[evs.length - 1]?.text ?? ''
+    pill =
+      `<rect${a.status === 'running' ? ' class="live"' : ''} x="${mx(W, 72, pw)}" y="60" width="${pw}" height="24" rx="12" fill="${KIND_COLOR[phase.kind]}" opacity="0.22"/>` +
+      `<rect x="${mx(W, 72, pw)}" y="60" width="${pw}" height="24" rx="12" fill="none" stroke="${KIND_COLOR[phase.kind]}" stroke-width="1.2"/>` +
+      `<text ${startText(W, 84, 76)} font-family="${FONT}" font-size="11.5" font-weight="600" fill="${KIND_COLOR[phase.kind]}">${xml(label)}</text>` +
+      `<text class="s" ${startText(W, 72 + pw + 10, 76)} font-family="${FONT}" font-size="11.5">${xml(fitText(last, 11.5, Math.max(40, W - 72 - pw - 28)))}</text>`
+  }
+  const stats: [string, string][] = [
+    [s.time, fmtTime(elapsed(a, at))],
+    [s.cost, `≈${fmtCost(a.costUsd)}`],
+    [s.actions, String(a.eventCount ?? evs.length)],
+    [s.ctx, `${ctxOf(a)}%`],
+  ]
+  const colW = (W - 72 - 16) / stats.length
+  const statRow = stats
+    .map(([k, v], i) =>
+      `<text ${startText(W, 72 + i * colW, 104)} font-family="${FONT}" font-size="11"><tspan class="m">${xml(k)} </tspan><tspan class="t" font-weight="600" font-variant-numeric="tabular-nums">${xml(v)}</tspan></text>`,
+    )
+    .join('')
+  const body =
+    `<rect x="${mx(W, 0, 4)}" y="14" width="4" height="${H - 28}" rx="2" fill="${color}"/>` +
+    crab(mx(W, 16, crabWidth(1.6)), 26, costumeOf(a.type), false, a.status === 'running', 1.6, isRtl()) +
+    `<text class="t" ${startText(W, 72, 30)} font-family="${FONT}" font-size="15" font-weight="700">${xml(fitText(a.description || a.type, 15, W - 72 - 40))}</text>` +
+    `<text ${startText(W, 72, 48)} font-family="${FONT}" font-size="11.5"><tspan fill="${color}" font-weight="600">${xml(meta.split('  ·  ')[0] ?? '')}</tspan><tspan class="s">  ·  ${xml(meta.split('  ·  ').slice(1).join('  ·  '))}</tspan></text>` +
+    statusMark(mx(W, W - 20), 24, a.status, color) +
+    pill +
+    statRow
+  return [cardSvg(W, H, body), H]
+}
+
+// The narrator's sentence as a quote, with what it has cost so far.
+const narrationSvg = (W: number, a: AgentRun, at: number, isBusy: boolean): [string, number] => {
+  const s = tr()
+  const lines = a.narration ? wrapText(a.narration.text, 13.5, W - 64, 4) : []
+  const H = 30 + Math.max(1, lines.length) * 20 + 26
+  const text = lines.length
+    ? lines.map((l, i) => `<text class="t" ${startText(W, 46, 32 + i * 20)} font-family="${FONT}" font-size="13.5" font-style="italic">${xml(l)}</text>`).join('')
+    : `<text class="s" ${startText(W, 46, 32)} font-family="${FONT}" font-size="13" font-style="italic">${xml(s.narrating)}</text>`
+  const foot = [`${s.narrator}`, `≈${fmtMicro(a.narratorUsd ?? 0)}`, a.narration ? `${s.ago} ${fmtTime(Math.max(0, at - a.narration.at))}` : '']
+    .filter(Boolean)
+    .join('  ·  ')
+  const body =
+    `<rect x="${mx(W, 0, 4)}" y="14" width="4" height="${H - 28}" rx="2" fill="${ACCENT}"/>` +
+    `<text ${startText(W, 14, 50)} font-family="Georgia,'Times New Roman',serif" font-size="46" font-weight="700" fill="${ACCENT}" opacity="0.85">“</text>` +
+    text +
+    `<text class="m" ${startText(W, 46, H - 14)} font-family="${FONT}" font-size="11">${xml(foot)}${isBusy ? ' <tspan class="live" fill="' + ACCENT + '">●</tspan>' : ''}</text>`
+  return [cardSvg(W, H, body), H]
+}
+
+// Every call as a coloured block, oldest first, with a legend of the kinds.
+const progressSvg = (W: number, evs: ActivityEvent[]): [string, number] => {
+  const s = tr()
+  const H = 84
+  const step = 10
+  const shown = evs.slice(-Math.max(1, Math.floor((W - 32) / step)))
+  const blocks = shown
+    .map((ev, i) => `<rect${i === shown.length - 1 ? ' class="live"' : ''} x="${mx(W, 16 + i * step, 8)}" y="36" width="8" height="20" rx="2.5" fill="${KIND_COLOR[ev.kind]}"/>`)
+    .join('')
+  let x = 16
+  const legend = kindCounts(evs)
+    .map(([k, n]) => {
+      const label = `${kindWord(k)} ${n}`
+      const w = textWidth(label, 11) + 28
+      const chip =
+        `<rect class="chip" x="${mx(W, x, w)}" y="62" width="${w}" height="16" rx="8"/>` +
+        `<circle cx="${mx(W, x + 9)}" cy="70" r="3.5" fill="${KIND_COLOR[k]}"/>` +
+        `<text class="s" ${startText(W, x + 17, 74)} font-family="${FONT}" font-size="11">${xml(label)}</text>`
+      x += w + 6
+      return chip
+    })
+    .join('')
+  return [cardSvg(W, H, cardTitle(W, s.progress, `${evs.length} ${s.actions}`) + blocks + legend), H]
+}
+
+const dirOf = (path: string): string => path.split('/').filter(Boolean).slice(-4, -1).join('/')
+const baseOf = (path: string): string => path.split('/').filter(Boolean).pop() ?? path
+
+// The files the agent touched, the latest first: read or edited, how often, and when.
+const filesSvg = (W: number, files: FileTouch[], at: number, isRunning: boolean): [string, number] => {
+  const s = tr()
+  const rows = files.slice(0, 8)
+  const more = files.length - rows.length
+  const ROW = 40
+  const H = 38 + Math.max(1, rows.length) * ROW + (more ? 18 : 0) + 4
+  const body = rows
+    .map((f, i) => {
+      const y = 36 + i * ROW
+      const kind: ActivityKind = f.edits ? 'edit' : 'explore'
+      const color = KIND_COLOR[kind]
+      const isHot = i === 0 && isRunning && at - f.lastAt < 20_000
+      const ago = `${s.ago} ${fmtTime(Math.max(0, at - f.lastAt))}`
+      const agoW = textWidth(ago, 11)
+      const pills: string[] = []
+      let right = W - 16 - agoW - 10
+      for (const [n, k] of [[f.edits, 'edit'], [f.reads, 'explore']] as const) {
+        if (!n) continue
+        const label = `${KIND_GLYPH[k]} ${n}`
+        const w = textWidth(label, 11) + 16
+        right -= w
+        pills.push(
+          `<rect x="${mx(W, right, w)}" y="${y + 9}" width="${w}" height="18" rx="9" fill="${KIND_COLOR[k]}" opacity="0.16"/>` +
+            `<text ${startText(W, right + 8, y + 22, false)} font-family="${FONT}" font-size="11" font-weight="600" fill="${KIND_COLOR[k]}">${xml(label)}</text>`,
+        )
+        right -= 6
+      }
+      const nameW = Math.max(40, right - 56 - 8)
+      return (
+        `<circle cx="${mx(W, 32)}" cy="${y + 18}" r="14" fill="${color}" opacity="0.15"/>` +
+        `<text x="${mx(W, 32)}" y="${y + 23}" text-anchor="middle" font-family="${FONT}" font-size="14" fill="${color}">${KIND_GLYPH[kind]}</text>` +
+        (isHot ? `<circle class="live" cx="${mx(W, 44)}" cy="${y + 7}" r="4" fill="${color}"/>` : '') +
+        `<text class="t" ${startText(W, 56, y + 15)} font-family="${FONT}" font-size="12.5" font-weight="600">${xml(fitText(baseOf(f.path), 12.5, nameW))}</text>` +
+        `<text class="m" ${startText(W, 56, y + 30)} font-family="${FONT}" font-size="11">${xml(fitText(dirOf(f.path) || '/', 11, nameW))}</text>` +
+        pills.join('') +
+        `<text class="m" ${endText(W, W - 16, y + 22)} font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${xml(ago)}</text>` +
+        (i < rows.length - 1 ? `<line class="ln" x1="${mx(W, 56)}" y1="${y + ROW - 2.5}" x2="${mx(W, W - 16)}" y2="${y + ROW - 2.5}"/>` : '')
+      )
+    })
+    .join('')
+  const empty = rows.length ? '' : `<text class="m" ${startText(W, 16, 56)} font-family="${FONT}" font-size="12">${xml(s.noFiles)}</text>`
+  const tail = more ? `<text class="m" ${startText(W, 56, H - 12)} font-family="${FONT}" font-size="11">+${more} ${xml(s.more)}</text>` : ''
+  return [cardSvg(W, H, cardTitle(W, `${s.files} · ${files.length}`) + body + empty + tail), H]
+}
+
+// The calls, newest first, on a line of dots coloured by kind.
+const timelineSvg = (W: number, evs: ActivityEvent[], startedAt: number, total: number, isRunning: boolean): [string, number] => {
+  const s = tr()
+  const rows = evs.slice(0, 14)
+  const ROW = 26
+  const H = 40 + Math.max(1, rows.length) * ROW + 6
+  const lineX = mx(W, 70)
+  const body = rows
+    .map((ev, i) => {
+      const y = 40 + i * ROW + ROW / 2
+      const isNow = i === 0 && isRunning
+      return (
+        `<text class="m" ${endText(W, 56, y + 4)} font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">+${fmtTime(Math.max(0, ev.at - startedAt))}</text>` +
+        `<circle${isNow ? ' class="live"' : ''} cx="${lineX}" cy="${y}" r="${isNow ? 6 : 4.5}" fill="${KIND_COLOR[ev.kind]}"/>` +
+        `<text class="${i === 0 ? 't' : 's'}" ${startText(W, 86, y + 4)} font-family="${FONT}" font-size="12"${i === 0 ? ' font-weight="600"' : ''}>${xml(fitText(ev.text, 12, W - 86 - 16))}</text>`
+      )
+    })
+    .join('')
+  const rail = rows.length > 1 ? `<line class="ln" x1="${lineX}" y1="${40 + ROW / 2}" x2="${lineX}" y2="${40 + (rows.length - 1) * ROW + ROW / 2}" stroke-width="2"/>` : ''
+  return [cardSvg(W, H, cardTitle(W, `${s.timeline} · ${total}`) + rail + body), H]
+}
+
 const plannedSvg = (W: number, p: Planned): string => {
   const tier = p.tier in TIER_COLOR ? p.tier : 'other'
   const color = colorOf(tier)
@@ -1467,6 +1675,22 @@ export const register: Register = (on, options) => {
       const timeline = [...evs].reverse().slice(0, 30)
       const narr = sel.narration
       const isNarrating = narrating.has(sel.id)
+      if (isDesktop && 'Svg' in ui) {
+        const { Svg } = ui
+        const card = (key: string, [source, height]: [string, number], alt: string) => (
+          <Svg key={key} source={source} alt={alt} width={W} height={height} />
+        )
+        return (
+          <Box flexDirection="column" gap={1}>
+            {back}
+            {card('hero', heroSvg(W, sel, at), `${sel.description}: ${runModel(sel)}${phase ? ', ' + kindWord(phase.kind) : ''}`)}
+            {narratorMode() !== 'off' && (narr || isNarrating) ? card('narr', narrationSvg(W, sel, at, isNarrating), narr?.text ?? s.narrating) : null}
+            {evs.length > 0 ? card('progress', progressSvg(W, evs), kindCounts(evs).map(([k, n]) => `${kindWord(k)} ${n}`).join(', ')) : null}
+            {card('files', filesSvg(W, files, at, sel.status === 'running'), `${s.files}: ${files.map(fl => baseOf(fl.path)).join(', ')}`)}
+            {evs.length > 0 ? card('timeline', timelineSvg(W, timeline, sel.startedAt, sel.eventCount ?? evs.length, sel.status === 'running'), `${s.timeline}: ${timeline[0]?.text ?? ''}`) : null}
+          </Box>
+        )
+      }
       const head =
         isDesktop && 'Svg' in ui ? (
           <ui.Svg key="row" source={agentSvg(W, sel, at, [])} alt={`${sel.description}: ${modelName(sel.model)}`} width={W} height={66} />

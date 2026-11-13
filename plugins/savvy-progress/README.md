@@ -5,11 +5,15 @@ A Claude Code mod: a progress bar above the prompt and a live panel of subagents
 - **Progress bar**: the flow's title, phase, accepted tasks out of planned, and a button with the crew size that opens the panel. It appears once something reports progress (savvy-flow does) or a `savvy-*` worker starts.
 - **Agents panel** (`/agents-info` toggles it; `/agents-info open` opens it or brings it forward without toggling): running, finished and planned subagents with model, effort, task progress, context, estimated cost and time. Working crabs walk, and each savvy tier animates its prop: the astronaut floats, the detective sweeps the magnifier, the engineer turns the wrench, the chef tosses the omelette, the racer runs with a fluttering flag. `prefers-reduced-motion` stops them.
 
-## Live activity (1.3.0)
+## Live activity and Details (1.4.0)
 
-The panel shows what each subagent is actually doing, read from the engine's own tool-call events: no model call, no tokens. A running row shows its latest action (`▸ Bash npm test`, `▸ Read src/foo.ts`, `▸ Grep useEffect`), flags `⏸ idle 1:20` when an agent has made no call for a minute, and the **Log** button opens the last four actions of every row. Finished rows keep their history.
+The panel shows what each subagent is actually doing, read from Claude Code's own tool-call events: no model call, no tokens.
 
-Self-reported steps (the `step` tool and the line added to each worker's brief) cost a tool call per step, so they are now **off** by default; set `stepReports` to `on` to bring them back.
+- **In the list**, a running agent shows its latest action (`▶ Bash npm test`, `◎ Read src/foo.ts`), `⏸ idle 1:20` after a minute without a call, and the narrator's latest sentence once there is one. **Log** shows the last four actions of every row.
+- **Details ›** under an agent opens it up close: its phase now (◎ exploring, ✎ editing, ▶ running, ◍ web, ⇢ delegating) and for how long, a strip of every call coloured by kind, the files it read or edited (how often, how long ago, the one in use pulsing), and its timeline. On the desktop these are drawn as cards; the terminal shows the same as text.
+- **The narrator** writes one sentence on what the open agent is doing and why ("It fixes the parser in foo.ts, then reruns the tests."). It is one Haiku 5.5 call at low effort, about 1K tokens in and 50 out (≈ $0.0001), made only for the agent open in Details, at most every 15 seconds and only after 3 new calls. Its running cost shows under the sentence. `narrator: off` turns it off, and the panel then costs no tokens at all; `all` narrates every agent.
+
+Self-reported steps (the `step` tool and the line added to each worker's brief) cost a tool call per step, so they are **off** by default; `stepReports: on` brings them back.
 
 ## Tools it adds
 
@@ -20,13 +24,15 @@ Cost is a rough estimate from token counts and a built-in per-model price table 
 
 ## Settings
 
-`language`: `auto` (default), `en`, `ru` or `he`. Hebrew draws the bar and the panel right to left. `auto` follows Claude Code's `language` setting, then the system locale, and falls back to English. Set it in `/config`, or, for a mod loaded by hand, in `~/.claude/settings.json`:
+`language`: `auto` (default), `en`, `fr`, `ru` or `he`. Hebrew draws the bar and the panel right to left. `auto` follows Claude Code's `language` setting, then the system locale, and falls back to English. Set it in `/config`, or, for a mod loaded by hand, in `~/.claude/settings.json`:
 
 ```json
 { "pluginConfigs": { "savvy-progress": { "options": { "language": "ru" } } } }
 ```
 
-`stepReports`: `off` (default) or `on`; see Live activity.
+`narrator`: `selected` (default), `all` or `off`; see Live activity and Details.
+
+`stepReports`: `off` (default) or `on`; see Live activity and Details.
 
 `autoOpen`: `savvy` (default) or `any`. With `savvy` the panel opens by itself when a `savvy-*` worker starts or a plan is reported. With `any` it also opens, once per session, when any other subagent starts. `/agents-info` toggles it either way.
 
