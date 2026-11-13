@@ -1,0 +1,33 @@
+# Keeps this fork current with johnnyvizz/claude-kit: merges upstream's main into
+# main every day. A conflict stops the merge and opens an issue instead.
+name: Sync upstream
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+  issues: write
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Merge upstream
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/johnnyvizz/claude-kit.git
+          git fetch upstream main
+          if git merge-base --is-ancestor upstream/main HEAD; then echo "Already up to date."; exit 0; fi
+          if git merge --no-edit upstream/main; then
+            git push origin HEAD:main
+          else
+            git merge --abort
+            gh issue create --title "Upstream merge conflict" --body "Merging johnnyvizz/claude-kit main into main conflicts. Merge it by hand: git fetch upstream && git merge upstream/main" || true
+            exit 1
+          fi

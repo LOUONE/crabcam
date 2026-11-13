@@ -1,4 +1,19 @@
-# claude-kit
+# crabcam
+
+A fork of [johnnyvizz/claude-kit](https://github.com/johnnyvizz/claude-kit). The one change is in **savvy-progress**: the agents panel shows what each subagent is actually doing (`▸ Bash npm test`, `▸ Read src/foo.ts`), read from Claude Code's own tool-call events, so it costs no tokens. Worker step reports, which did cost tokens, are off by default. See [plugins/savvy-progress](plugins/savvy-progress/README.md#live-activity-130).
+
+A daily GitHub Action merges upstream into `main`, so upstream updates arrive here on their own; a conflict opens an issue instead.
+
+```
+/plugin marketplace add LOUONE/crabcam
+/plugin install savvy-progress@crabcam
+```
+
+The plugin keeps its name, `savvy-progress`, so savvy-flow keeps driving it. Uninstall `savvy-progress@claude-kit` first: two plugins of the same name clash.
+
+---
+
+# claude-kit (upstream README)
 
 My public skills and mods for [Claude Code](https://claude.com/claude-code), in one place. Every item is a standalone plugin under `plugins/`: install only what you need.
 

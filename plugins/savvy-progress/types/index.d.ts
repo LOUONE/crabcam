@@ -38,11 +38,15 @@ export type AgentRun = {
   stepDone?: number
   stepTotal?: number
   stepNote?: string
+  /** Last tool calls of the agent, one short line each, newest last. Read from the engine's events. */
+  activity?: string[]
+  activityAt?: number
 }
 
 export type Panel = {
   isCompact: boolean
   isDoneCollapsed: boolean
+  isLogOpen?: boolean
   autoOpenedFor: string
 }
 

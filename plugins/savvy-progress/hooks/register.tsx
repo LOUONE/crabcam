@@ -8,6 +8,7 @@ const agents = atom({ plugin: 'savvy-progress', key: 'agents' } as const, [])
 const panel = atom({ plugin: 'savvy-progress', key: 'panel' } as const, {
   isCompact: false,
   isDoneCollapsed: false,
+  isLogOpen: false,
   autoOpenedFor: '',
 })
 const now = atom({ plugin: 'savvy-progress', key: 'now' } as const, 0)
@@ -74,6 +75,8 @@ const STRINGS = {
     tasks: 'Tasks',
     review: 'Review',
     busy: 'running',
+    log: 'Log',
+    idle: 'idle',
     ctx: 'ctx',
     tier: { light: 'light', medium: 'medium', careful: 'careful', heavy: 'heavy', fable: 'fable', other: 'other' },
     effort: { low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' },
@@ -105,6 +108,8 @@ const STRINGS = {
     tasks: 'Задачи',
     review: 'Ревью',
     busy: 'в работе',
+    log: 'Журнал',
+    idle: 'простой',
     ctx: 'ctx',
     tier: { light: 'light', medium: 'medium', careful: 'careful', heavy: 'heavy', fable: 'fable', other: 'other' },
     effort: { low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' },
@@ -136,6 +141,8 @@ const STRINGS = {
     tasks: 'משימות',
     review: 'בדיקה',
     busy: 'בעבודה',
+    log: 'יומן',
+    idle: 'ללא פעילות',
     ctx: 'הקשר',
     tier: { light: 'קל', medium: 'בינוני', careful: 'זהיר', heavy: 'כבד', fable: 'פייבל', other: 'אחר' },
     effort: { low: 'נמוך', medium: 'בינוני', high: 'גבוה', xhigh: 'גבוה מאוד', max: 'מקסימלי' },
@@ -469,6 +476,41 @@ const fmtTime = (ms: number): string => {
 
 const elapsed = (a: AgentRun, at: number): number => (a.endedAt ?? Math.max(at, a.startedAt)) - a.startedAt
 
+// --- live activity: what each subagent actually does, read from its tool calls.
+// The engine reports every call; nothing here asks the model for anything, so it costs no tokens.
+const MAX_LOG = 12
+const LOG_OPEN_LINES = 4
+const LOG_LINE = 14
+const IDLE_MS = 60_000
+
+const lastSegments = (p: string): string => p.split('/').filter(Boolean).slice(-2).join('/')
+
+// One short line for a tool call: "Read src/foo.ts", "Bash npm test", "Grep useEffect".
+const activityOf = (e: Record<string, unknown>): string => {
+  const str = (k: string): string => (typeof e[k] === 'string' ? (e[k] as string) : '')
+  const name = String(e.tool ?? '?').replace(/^mcp__/, '').replace(/__/g, ':')
+  // A file first; a directory `path` (Grep, Glob) only when nothing says more.
+  const file = str('file_path') || str('notebook_path')
+  const detail = file
+    ? lastSegments(file)
+    : (str('command').split('\n')[0] ||
+        str('pattern') ||
+        str('url').replace(/^https?:\/\//, '') ||
+        str('query') ||
+        str('description') ||
+        lastSegments(str('path')))
+  return clip(`${name} ${detail}`.trim(), 80)
+}
+
+// The lines a row shows: the last few with the log open, else the latest one of a running agent.
+const logLines = (a: AgentRun, isOpen: boolean): string[] => {
+  const n = isOpen ? LOG_OPEN_LINES : a.status === 'running' ? 1 : 0
+  return n ? (a.activity ?? []).slice(-n) : []
+}
+
+const idleMs = (a: AgentRun, at: number): number =>
+  a.status === 'running' && a.activity?.length ? Math.max(0, at - (a.activityAt ?? a.startedAt)) : 0
+
 type Planned = PlannedTask & { n: number }
 
 const plannedOf = (f: Flow | null, list: AgentRun[]): Planned[] => {
@@ -553,8 +595,8 @@ const CRAB_CSS = `<style>
 .c-careful.run .it{transform-origin:100% 100%;animation:twist .5s ease-in-out infinite}
 @keyframes twist{50%{transform:rotate(-35deg)}}
 .c-medium.run .pan{transform-origin:0 50%;animation:tilt 1s ease-in-out infinite}
-.c-medium.run .egg{animation:flip 1s ease-in-out infinite}
-@keyframes tilt{20%,40%{transform:rotate(-12deg)}}@keyframes flip{30%{transform:translateY(-5px) scaleY(-1)}60%{transform:translateY(0)}}
+.c-medium.run .egg{animation:steam 1s ease-out infinite}
+@keyframes tilt{20%,40%{transform:rotate(-12deg)}}@keyframes steam{0%{transform:translateY(1px);opacity:.9}100%{transform:translateY(-3px);opacity:0}}
 .c-light.run .la{animation-duration:.25s}.c-light.run .lb{animation-duration:.25s;animation-delay:-.125s}
 .c-light.run .flag{transform-origin:0 50%;animation:wave .25s steps(1) infinite}
 @keyframes wave{50%{transform:skewY(-12deg) scaleX(.85)}}
@@ -563,51 +605,83 @@ const CRAB_CSS = `<style>
 @media (prefers-reduced-motion: reduce){.run,.run g{animation:none!important}}
 </style>`
 
+// Corporate Clawd: the head keeps the brand clay; a suit with lapels, a white
+// shirt and a tie in the tier's color covers the lower body, sleeves with white
+// cuffs the arms, trousers and polished shoes the legs.
+const SHIRT = '#F4F3EE'
+const SHOE = '#141414'
+const GOLD = '#F5C542'
+type Suit = { jacket: string; lapel: string; shirt?: string; pants?: string; pocket?: string; armFront?: number; armCls?: string }
+
+const suit = (f: Fill, tie: string, s: Suit): void => {
+  const a = s.armFront ?? 0
+  const shirt = s.shirt ?? SHIRT
+  const pants = s.pants ?? s.jacket
+  crabBody(f, a, s.armCls)
+  stamp(f, 7, 15, [
+    'jjjjlwwttwwljjjj',
+    'jjjjjlwttwljppjj',
+    'jjjjjjlttljjjjjj',
+    'jjjjjjjttjjjjjjj',
+    'jjjjjjjttjjjjjjj',
+    'jjjjjjjbjjjjjjjj',
+    'jjjjjjjjjjjjjjjj',
+  ], { j: s.jacket, l: s.lapel, w: shirt, t: tie, p: s.pocket ?? SHIRT, b: s.lapel })
+  f(13, 14, 1, 1, shirt); f(16, 14, 1, 1, shirt)
+  f(3, 14, 4, 2, s.jacket); f(3, 16, 4, 1, shirt)
+  f(23, 14 + a, 4, 2, s.jacket, s.armCls); f(23, 16 + a, 4, 1, shirt, s.armCls)
+  for (const [x, cls] of [[7, 'la'], [17, 'la'], [11, 'lb'], [21, 'lb']] as const) {
+    f(x, 22, 2, 3, pants, cls); f(x, 25, 3, 1, SHOE, cls)
+  }
+}
+
 const COSTUMES: Record<string, (f: Fill, t: string) => void> = {
-  // Fable: astronaut in a glass dome; floats instead of walking, the antenna and the star blink.
+  // Fable: the CEO in a top hat and a monocle; floats above the fray, the monocle and the star glint.
   fable: (f, t) => {
-    crabBody(f)
-    f(6, 7, 18, 1, '#E6E8EE'); f(5, 8, 1, 14, '#E6E8EE'); f(24, 8, 1, 14, '#E6E8EE'); f(6, 22, 18, 1, '#C9CCD2')
-    f(6, 8, 18, 14, 'rgba(169,214,245,.32)'); f(8, 9, 2, 1, '#fff'); f(8, 10, 1, 2, '#fff')
-    f(14, 4, 2, 3, '#C9CCD2'); f(14, 2, 2, 2, t, 'ant'); f(13, 18, 4, 2, t)
-    f(27, 3, 1, 3, '#F5C542', 'star'); f(26, 4, 3, 1, '#F5C542', 'star')
+    suit(f, t, { jacket: '#232329', lapel: '#3A3A44', pocket: GOLD })
+    stamp(f, 9, 3, ['..khkkkkkk..', '..khkkkkkk..', '..khkkkkkk..', '..khkkkkkk..', '..gggggggg..', '..kkkkkkkk..', 'kkkkkkkkkkkk'], { k: '#1B1B20', h: '#3A3A44', g: t })
+    f(18, 11, 4, 1, GOLD); f(18, 14, 4, 1, GOLD); f(18, 12, 1, 2, GOLD); f(21, 12, 1, 2, GOLD); f(21, 15, 1, 3, GOLD)
+    f(20, 12, 1, 1, '#fff', 'ant')
+    f(27, 3, 1, 3, GOLD, 'star'); f(26, 4, 3, 1, GOLD, 'star')
   },
-  // Heavy: detective with a deerstalker; the magnifier sweeps and glints.
+  // Heavy: the auditor in browline glasses; the magnifier sweeps the ledger and glints.
   heavy: (f, t) => {
-    crabBody(f, -4, 'it')
-    stamp(f, 6, 3, ['......bbbbbb......', '....bbcbbcbbbb....', '...bbbbbbbbbbbb...', '..bcbbcbbcbbcbbb..', '.bbbbbbbbbbbbbbbb.', 'dddddddddddddddddd'], { b: '#7A4A26', c: '#A0703F', d: '#5A3519' })
-    f(6, 9, 18, 1, t)
+    suit(f, t, { jacket: '#5B6270', lapel: '#4A505C', armFront: -4, armCls: 'it' })
+    f(8, 11, 4, 1, INK); f(18, 11, 4, 1, INK)
+    f(8, 12, 1, 2, '#8E929A'); f(11, 12, 1, 2, '#8E929A'); f(8, 14, 4, 1, '#8E929A')
+    f(18, 12, 1, 2, '#8E929A'); f(21, 12, 1, 2, '#8E929A'); f(18, 14, 4, 1, '#8E929A'); f(12, 12, 6, 1, '#8E929A')
     stamp(f, 23, 1, ['.kkk.', 'k...k', 'k...k', 'k...k', '.kkk.'], { k: '#3A3A3C' }, 'it')
     f(24, 2, 3, 3, 'rgba(169,214,245,.7)', 'it'); f(25, 6, 1, 4, '#7A4A26', 'it'); f(24, 2, 1, 1, '#fff', 'gl')
   },
-  // Careful: engineer in a hard hat; the wrench turns a bolt.
+  // Careful: legal & compliance, slicked side part; the fountain pen signs in triplicate.
   careful: (f, t) => {
-    crabBody(f)
-    stamp(f, 6, 4, ['.....yyyyyyyy.....', '...yyyyyhhyyyyy...', '..yyyyyyhhyyyyyy..', '..yyyyyyhhyyyyyy..', '.yyyyyyyhhyyyyyyy.', 'dddddddddddddddddd'], { y: '#F5C542', h: '#FBE08A', d: '#C99A1E' })
-    f(13, 5, 4, 2, t)
-    stamp(f, 0, 10, ['.s.s', 'sss.', '.s..', '.s..'], { s: '#8E929A' }, 'it')
+    suit(f, t, { jacket: '#2B3A55', lapel: '#22304A' })
+    stamp(f, 7, 8, ['...hhhhhhhhhh...', '.hhhhhhhh.hhhhh.', 'hhhh........hhhh'], { h: '#3B2A20' })
+    stamp(f, 0, 9, ['g....', '.g...', '..k..', '...k.', '....k'], { g: GOLD, k: INK }, 'it')
   },
-  // Medium: chef, the toque traced from DockCrab's Sprites.chefHat; tosses the omelette.
+  // Medium: the manager between two meetings; sips the coffee, the steam rises.
   medium: (f, t) => {
-    crabBody(f, -4, 'pan')
-    stamp(f, 6, 0, ['........lll.......', '.......lllll......', '.wwwwgwwwwwwgwwwww', 'wwwwwwwwwwwwwwwwww', 'wwwwwwwwwwwwwwwwww', 'wwwwwgwwwwwggwwwww', '.wwwwgwwwwwggwwwww', '.dddbbbbbbbbbbbbb.', '.dddbbbbbbbbbbbbb.', '.dddbbbbbbbbbbbbb.'], { w: '#F4F3EE', l: '#F7F6F2', g: '#D2D1C8', b: t, d: '#B45F43' })
-    f(22, 8, 7, 2, '#4A4A48', 'pan'); f(26, 10, 1, 1, '#4A4A48', 'pan'); f(24, 7, 3, 1, '#F5B731', 'egg')
+    suit(f, t, { jacket: '#3D5A80', lapel: '#30496A', armFront: -4, armCls: 'pan' })
+    f(23, 6, 4, 4, t, 'pan'); f(23, 7, 4, 1, SHIRT, 'pan'); f(27, 7, 1, 2, t, 'pan')
+    f(24, 3, 1, 2, '#C9CCD2', 'egg'); f(26, 2, 1, 2, '#C9CCD2', 'egg')
   },
-  // Light: racer in a helmet; runs at double pace, the checkered flag flutters.
+  // Light: the intern in shirtsleeves; runs at double pace, the urgent memo flaps.
   light: (f, t) => {
-    crabBody(f, -4)
-    stamp(f, 6, 5, ['....rrrrrrrrrr....', '..rrrrrrwwrrrrrr..', '.rrrrrrrwwrrrrrrr.', '.rrrrrrrwwrrrrrrr.', '.rrrrrrrwwrrrrrrr.', '.kkkkkkkkkkkkkkkkr'], { r: t, w: '#F8F6F1', k: INK })
-    f(25, 1, 1, 9, '#8E929A')
-    stamp(f, 26, 1, ['wkwk', 'kwkw', 'wkwk'], { w: '#F8F6F1', k: INK }, 'flag')
+    suit(f, t, { jacket: '#BFD8EE', lapel: '#A3C2DE', shirt: '#BFD8EE', pants: '#3A3D42', pocket: '#BFD8EE', armFront: -4 })
+    f(9, 18, 3, 3, '#FFFFFF'); f(9, 18, 3, 1, t); f(10, 15, 1, 3, t)
+    stamp(f, 23, 4, ['wwwww', 'wkkkw', 'wwwww', 'wkkww', 'wwwww', '.ww..'], { w: '#FFFFFF', k: '#9A9A96' }, 'flag')
   },
-  // Explore: pirate scouting the code; the cutlass fences.
+  // Explore: the sales rep in a fedora; the pointer sweeps the slide.
   explore: f => {
-    crabBody(f)
-    stamp(f, 5, 3, ['.kk..............kk.', '.kkk....kkkk....kkk.', '..kkkkkkkwwkkkkkkk..', '..kkkkkkkkkkkkkkkk..', '.gggggggggggggggggg.'], { k: '#55514C', w: '#F8F6F1', g: '#F5C542' })
-    f(7, 11, 11, 1, INK); f(18, 11, 4, 3, INK)
-    f(27, 6, 1, 9, '#C9CCD2', 'it'); f(26, 15, 3, 1, '#7A4A26', 'it')
+    suit(f, '#B5443A', { jacket: '#6B5444', lapel: '#57443A' })
+    stamp(f, 6, 5, ['.....kkkkkkkk.....', '....kkkkddkkkk....', '....kkkkkkkkkk....', '....gggggggggg....', 'kkkkkkkkkkkkkkkkkk'], { k: '#4A4440', d: '#36312D', g: '#B5443A' })
+    f(27, 5, 1, 10, '#7A4A26', 'it'); f(27, 4, 1, 1, '#B5443A', 'it')
   },
-  other: f => crabBody(f),
+  // Anyone else: the plain employee with a briefcase.
+  other: f => {
+    suit(f, '#B5443A', { jacket: '#3A3D42', lapel: '#2E3135' })
+    stamp(f, 1, 18, ['.hhh.', 'bbbbb', 'bbgbb', 'bbbbb'], { h: '#4A2E1A', b: '#7A4A26', g: GOLD })
+  },
 }
 
 const costumeOf = (type: string): string => (type === 'Explore' ? 'explore' : tierOf(type))
@@ -693,7 +767,11 @@ const progressOf = (a: AgentRun): number | null => {
 
 const ctxOf = (a: AgentRun): number => (a.contextMax ? Math.min(100, Math.round((a.contextTokens / a.contextMax) * 100)) : 0)
 
-const agentSvg = (W: number, a: AgentRun, at: number): string => {
+const agentH = (lines: number): number => 66 + (lines ? lines * LOG_LINE + 4 : 0)
+
+const agentSvg = (W: number, a: AgentRun, at: number, lines: string[]): string => {
+  const H = agentH(lines.length)
+  const idle = idleMs(a, at)
   const s = tr()
   const tier = tierOf(a.type)
   const color = colorOf(tier)
@@ -709,9 +787,17 @@ const agentSvg = (W: number, a: AgentRun, at: number): string => {
   const stepsW = Math.max(0, barW - textWidth(stats, 11) - 12)
   // Without reported steps the bar falls back to the context, drawn grey.
   const fillW = Math.round(barW * (progress ?? ctx / 100))
+  const log = lines
+    .map((text, i) => {
+      const isLast = i === lines.length - 1
+      const y = 73 + i * LOG_LINE
+      const tail = isLast && idle > IDLE_MS ? `<tspan fill="#D0833A">  ⏸ ${s.idle} ${fmtTime(idle)}</tspan>` : ''
+      return `<text class="${isLast ? 't' : 'm'}" ${startText(W, 42, y)} font-family="${FONT}" font-size="11">${isLast ? '▸ ' : '· '}${xml(fitText(text, 11, textW - 90))}${tail}</text>`
+    })
+    .join('\n')
   return svg(
     W,
-    66,
+    H,
     `${rowCrab(W, 0, 14, costumeOf(a.type), false, a.status === 'running')}
 <text class="t" ${startText(W, 42, 18)} font-family="${FONT}" font-size="13" font-weight="600">${xml(fitText(a.description || a.type, 13, textW))}</text>
 <text ${startText(W, 42, 34)} font-family="${FONT}" font-size="11"><tspan fill="${color}">${xml(tier === 'other' ? a.type : tierWord(tier))}</tspan><tspan class="s">  ${xml(meta.join('  ·  '))}</tspan></text>
@@ -719,7 +805,8 @@ ${steps && stepsW > 30 ? `<text class="t" ${startText(W, 42, 49)} font-family="$
 <text class="s" ${endText(W, 42 + barW, 49, true)} font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${stats}</text>
 <rect class="k" x="${mx(W, 42, barW)}" y="55" width="${barW}" height="4" rx="2"/><rect${progress === null ? ' class="m"' : ''} x="${mx(W, 42, fillW)}" y="55" width="${fillW}" height="4" rx="2"${progress === null ? '' : ` fill="${color}"`}/>
 ${statusMark(mx(W, W - 8), 16, a.status, color)}
-<line class="ln" x1="0" y1="65.5" x2="${W}" y2="65.5"/>`,
+${log}
+<line class="ln" x1="0" y1="${H - 0.5}" x2="${W}" y2="${H - 0.5}"/>`,
   )
 }
 
@@ -826,7 +913,9 @@ export const register: Register = (on, options) => {
         },
       },
     })
-    await $.tool.register({
+    // Self-reported steps cost tokens (a tool call per step); off unless asked for. The panel
+    // follows the agent's real tool calls instead.
+    if (options.stepReports === 'on') await $.tool.register({
       name: 'step',
       description:
         'For savvy-flow workers: report progress on your own task to the agents panel. ' +
@@ -871,6 +960,25 @@ export const register: Register = (on, options) => {
     }
     const isOpen = await togglePane($)
     return { text: isOpen ? tr().opened : tr().closed }
+  })
+
+  // Live activity: every tool call a subagent makes, recorded as one short line. Runs in the
+  // engine, asks the model for nothing, and never blocks or alters the call.
+  on('tool.call', async ($, e, next) => {
+    const agentId = e.agentId
+    const rec = e as unknown as Record<string, unknown>
+    if (agentId && rec.tool !== STEP_TOOL) {
+      try {
+        const text = activityOf(rec)
+        const at = await $.clock.now()
+        await update($, agents, list =>
+          list.map(a => (a.agentId !== agentId ? a : { ...a, activity: [...(a.activity ?? []), text].slice(-MAX_LOG), activityAt: at })),
+        )
+      } catch {
+        // The panel is a view: a failed note must not stop the agent's call.
+      }
+    }
+    return next(e)
   })
 
   on('tool.call', { tool: TOOL }, async ($, e) => {
@@ -923,7 +1031,7 @@ export const register: Register = (on, options) => {
   })
 
   on('agent.spawn', async ($, e, next) => {
-    const isUnbriefed = e.subagentType.startsWith('savvy-') && !e.prompt.includes(STEP_TOOL)
+    const isUnbriefed = options.stepReports === 'on' && e.subagentType.startsWith('savvy-') && !e.prompt.includes(STEP_TOOL)
     const started = await next(isUnbriefed ? { ...e, prompt: e.prompt + STEP_BRIEF } : e)
     if (started.deny !== undefined) return started
 
@@ -1059,6 +1167,14 @@ export const register: Register = (on, options) => {
         onPress={() => update($, panel, prev => ({ ...prev, isDoneCollapsed: !prev.isDoneCollapsed }))}
       />
     )
+    const toggleLog = (
+      <Button
+        key="log"
+        label={`${p.isLogOpen ? '▾' : isRtl() ? '◂' : '▸'} ${s.log}`}
+        plain
+        onPress={() => update($, panel, prev => ({ ...prev, isLogOpen: !prev.isLogOpen }))}
+      />
+    )
     const isEmpty = list.length === 0 && planned.length === 0
     const summary = `≈${fmtCost(t.cost)}, ${fmtTokens(t.tokens)} ${s.tokensWord}, ${fmtTime(t.time)}`
 
@@ -1081,9 +1197,11 @@ export const register: Register = (on, options) => {
           </Box>
         )
       }
-      const shownDone = p.isDoneCollapsed ? 0 : finished.length
+      const isLog = p.isLogOpen === true
+      const rowH = (a: AgentRun): number => agentH(logLines(a, isLog).length)
+      const shownDone = p.isDoneCollapsed ? [] : finished
       const lines = 1 + (isEmpty ? 1 : 0) + (running.length > 0 ? 1 : 0) + (finished.length > 0 ? 1 : 0) + (planned.length > 0 ? 1 : 0)
-      const gridH = headerHeight(title) + lines * LINE_H + (running.length + shownDone) * 66 + planned.length * 46
+      const gridH = headerHeight(title) + lines * LINE_H + [...running, ...shownDone].reduce((h, a) => h + rowH(a), 0) + planned.length * 46
       return (
         <Box flexDirection="column">
           {/* The grid sizes the pane; the content is placed over it, as an
@@ -1094,15 +1212,16 @@ export const register: Register = (on, options) => {
           <Box flexDirection="column" position="absolute" top={0} left={0} right={0} alignItems={align}>
             <Svg source={headerSvg(W, title, t)} alt={title ? `${title}: ${summary}` : summary} width={W} height={headerHeight(title)} />
             {toggleCompact}
+            {toggleLog}
             {isEmpty && <Text dimColor>{s.empty}</Text>}
             {running.length > 0 && section('h-run', `${s.running} · ${running.length}`)}
             {running.map(a => (
-              <Svg key={a.id} source={agentSvg(W, a, at)} alt={`${a.description}: ${modelName(a.model)}, ${s.isRunning}`} width={W} height={66} />
+              <Svg key={a.id} source={agentSvg(W, a, at, logLines(a, isLog))} alt={`${a.description}: ${modelName(a.model)}, ${s.isRunning}${a.activity?.length ? ', ' + a.activity[a.activity.length - 1] : ''}`} width={W} height={rowH(a)} />
             ))}
             {finished.length > 0 && toggleDone}
             {!p.isDoneCollapsed &&
               finished.map(a => (
-                <Svg key={a.id} source={agentSvg(W, a, at)} alt={`${a.description}: ${modelName(a.model)}, ${s.isFinished}`} width={W} height={66} />
+                <Svg key={a.id} source={agentSvg(W, a, at, logLines(a, isLog))} alt={`${a.description}: ${modelName(a.model)}, ${s.isFinished}`} width={W} height={rowH(a)} />
               ))}
             {planned.length > 0 && section('h-plan', `${s.planned} · ${planned.length}`)}
             {planned.map(pl => (
@@ -1145,6 +1264,17 @@ export const register: Register = (on, options) => {
               {steps}{s.ctx} {ctx}% · {fmtTokens(a.contextTokens)} ≈{fmtCost(a.costUsd)} {fmtTime(elapsed(a, at))}
             </Text>
           </Text>
+          {logLines(a, p.isLogOpen === true).map((line, i, all) => {
+            const idle = i === all.length - 1 ? idleMs(a, at) : 0
+            return (
+              <Text key={i} dimColor={i < all.length - 1} wrap="truncate-end">
+                {'  '}
+                {i === all.length - 1 ? '▸ ' : '· '}
+                {line}
+                {idle > IDLE_MS ? <Text color="yellow">{`  ⏸ ${s.idle} ${fmtTime(idle)}`}</Text> : null}
+              </Text>
+            )
+          })}
         </Box>
       )
     }
@@ -1155,7 +1285,10 @@ export const register: Register = (on, options) => {
           <Text bold wrap="truncate-end">
             {title}
           </Text>
-          {toggleCompact}
+          <Box flexDirection="row" gap={1}>
+            {toggleLog}
+            {toggleCompact}
+          </Box>
         </Box>
         <Text dimColor>
           ≈{fmtCost(t.cost)} · {fmtTokens(t.tokens)} {s.tokensWord} · {fmtTime(t.time)}
