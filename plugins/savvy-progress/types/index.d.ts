@@ -18,6 +18,32 @@ export type Flow = {
 
 export type AgentStatus = 'running' | 'done' | 'failed'
 
+export type ActivityKind = 'explore' | 'edit' | 'run' | 'web' | 'agent' | 'other'
+
+/** One tool call of an agent, as the panel keeps it. */
+export type ActivityEvent = {
+  at: number
+  tool: string
+  kind: ActivityKind
+  target: string
+  text: string
+}
+
+/** A file an agent read or edited. */
+export type FileTouch = {
+  path: string
+  reads: number
+  edits: number
+  lastAt: number
+}
+
+/** The narrator's latest sentence about an agent, and how many calls it had seen. */
+export type Narration = {
+  text: string
+  at: number
+  upTo: number
+}
+
 export type AgentRun = {
   id: string
   agentId?: string
@@ -41,12 +67,19 @@ export type AgentRun = {
   /** Last tool calls of the agent, one short line each, newest last. Read from the engine's events. */
   activity?: string[]
   activityAt?: number
+  events?: ActivityEvent[]
+  eventCount?: number
+  files?: FileTouch[]
+  narration?: Narration
+  narratorUsd?: number
 }
 
 export type Panel = {
   isCompact: boolean
   isDoneCollapsed: boolean
   isLogOpen?: boolean
+  /** The agent open in detail, by its run id. */
+  selected?: string
   autoOpenedFor: string
 }
 
