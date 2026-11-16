@@ -942,7 +942,10 @@ const COSTUMES: Record<string, (f: Fill, t: string) => void> = {
 
 const costumeOf = (type: string): string => (type === 'Explore' ? 'explore' : tierOf(type))
 
-const CRAB_SCALE = 1.1
+const STRIP_STEP = 50
+const CRAB_SCALE = 1.5
+// Left edge of the text next to a panel crab: crab width plus a 9px gap.
+const TEXT_X = Math.round(CRAB_BOX * CRAB_SCALE) + 9
 
 // Body and props nest inside `bd` so a prop rides the bob and adds its own motion;
 // legs stay outside it and step on their own. `mirror` flips the crab inside its
@@ -1032,7 +1035,7 @@ const agentSvg = (W: number, a: AgentRun, at: number, lines: string[], said = ''
   const tier = tierOf(a.type)
   const color = colorOf(tier)
   const ctx = ctxOf(a)
-  const textW = W - 42 - 22
+  const textW = W - TEXT_X - 22
   const meta = [runModel(a)]
   if (a.round > 1) meta.push(`${s.round} ${a.round}`)
   if (a.status === 'failed') meta.push(s.failed)
@@ -1048,19 +1051,19 @@ const agentSvg = (W: number, a: AgentRun, at: number, lines: string[], said = ''
       const isLast = i === lines.length - 1
       const y = 73 + (i + (said ? 1 : 0)) * LOG_LINE
       const tail = isLast && idle > IDLE_MS ? `<tspan fill="#D0833A">  ⏸ ${s.idle} ${fmtTime(idle)}</tspan>` : ''
-      return `<text class="${isLast ? 't' : 'm'}" ${startText(W, 42, y)} font-family="${FONT}" font-size="11">${xml(fitText(text, 11, textW - 90))}${tail}</text>`
+      return `<text class="${isLast ? 't' : 'm'}" ${startText(W, TEXT_X, y)} font-family="${FONT}" font-size="11">${xml(fitText(text, 11, textW - 90))}${tail}</text>`
     })
     .join('\n')
-  const saidLine = said ? `<text class="s" ${startText(W, 42, 73)} font-family="${FONT}" font-size="11" font-style="italic">${xml(fitText(said, 11, textW))}</text>` : ''
+  const saidLine = said ? `<text class="s" ${startText(W, TEXT_X, 73)} font-family="${FONT}" font-size="11" font-style="italic">${xml(fitText(said, 11, textW))}</text>` : ''
   return svg(
     W,
     H,
     `${rowCrab(W, 0, 14, costumeOf(a.type), false, a.status === 'running')}
-<text class="t" ${startText(W, 42, 18)} font-family="${FONT}" font-size="13" font-weight="600">${xml(fitText(a.description || a.type, 13, textW))}</text>
-<text ${startText(W, 42, 34)} font-family="${FONT}" font-size="11"><tspan fill="${color}">${xml(tier === 'other' ? a.type : tierWord(tier))}</tspan><tspan class="s">  ${xml(meta.join('  ·  '))}</tspan></text>
-${steps && stepsW > 30 ? `<text class="t" ${startText(W, 42, 49)} font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${xml(fitText(steps, 11, stepsW))}</text>` : ''}
-<text class="s" ${endText(W, 42 + barW, 49, true)} font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${stats}</text>
-<rect class="k" x="${mx(W, 42, barW)}" y="55" width="${barW}" height="4" rx="2"/><rect${progress === null ? ' class="m"' : ''} x="${mx(W, 42, fillW)}" y="55" width="${fillW}" height="4" rx="2"${progress === null ? '' : ` fill="${color}"`}/>
+<text class="t" ${startText(W, TEXT_X, 18)} font-family="${FONT}" font-size="13" font-weight="600">${xml(fitText(a.description || a.type, 13, textW))}</text>
+<text ${startText(W, TEXT_X, 34)} font-family="${FONT}" font-size="11"><tspan fill="${color}">${xml(tier === 'other' ? a.type : tierWord(tier))}</tspan><tspan class="s">  ${xml(meta.join('  ·  '))}</tspan></text>
+${steps && stepsW > 30 ? `<text class="t" ${startText(W, TEXT_X, 49)} font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${xml(fitText(steps, 11, stepsW))}</text>` : ''}
+<text class="s" ${endText(W, TEXT_X + barW, 49, true)} font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${stats}</text>
+<rect class="k" x="${mx(W, TEXT_X, barW)}" y="55" width="${barW}" height="4" rx="2"/><rect${progress === null ? ' class="m"' : ''} x="${mx(W, TEXT_X, fillW)}" y="55" width="${fillW}" height="4" rx="2"${progress === null ? '' : ` fill="${color}"`}/>
 ${statusMark(mx(W, W - 8), 16, a.status, color)}
 ${saidLine}
 ${log}
@@ -1267,15 +1270,15 @@ const timelineSvg = (W: number, evs: ActivityEvent[], startedAt: number, total: 
 const plannedSvg = (W: number, p: Planned): string => {
   const tier = p.tier in TIER_COLOR ? p.tier : 'other'
   const color = colorOf(tier)
-  const textW = W - 42 - 22
+  const textW = W - TEXT_X - 22
   const meta = [tierModel(tier)]
   if (p.after.length) meta.push(`${tr().after} ${p.after.join(', ')}`)
   return svg(
     W,
-    46,
+    54,
     `${rowCrab(W, 0, 6, tier, true)}
-<text class="s" ${startText(W, 42, 18)} font-family="${FONT}" font-size="13" font-weight="600">${xml(fitText(`${p.n}. ${p.title}`, 13, textW))}</text>
-<text ${startText(W, 42, 34)} font-family="${FONT}" font-size="11"><tspan fill="${color}">${xml(tierWord(tier))}</tspan><tspan class="m">  ${xml(meta.filter(Boolean).join('  ·  '))}</tspan></text>
+<text class="s" ${startText(W, TEXT_X, 18)} font-family="${FONT}" font-size="13" font-weight="600">${xml(fitText(`${p.n}. ${p.title}`, 13, textW))}</text>
+<text ${startText(W, TEXT_X, 34)} font-family="${FONT}" font-size="11"><tspan fill="${color}">${xml(tierWord(tier))}</tspan><tspan class="m">  ${xml(meta.filter(Boolean).join('  ·  '))}</tspan></text>
 ${statusMark(mx(W, W - 8), 16, 'planned', color)}
 <line class="ln" x1="0" y1="45.5" x2="${W}" y2="45.5"/>`,
   )
@@ -1287,18 +1290,18 @@ const compactSvg = (W: number, list: AgentRun[], planned: Planned[], t: ReturnTy
     ...list.filter(a => a.status !== 'running').map(a => ({ k: costumeOf(a.type), c: colorOf(tierOf(a.type)), s: a.status, dim: false })),
     ...planned.map(p => ({ k: p.tier in TIER_COLOR ? p.tier : 'other', c: colorOf(p.tier), s: 'planned', dim: true })),
   ]
-  const fit = Math.max(1, Math.floor((W - 150) / 36))
+  const fit = Math.max(1, Math.floor((W - 150) / STRIP_STEP))
   const shown = icons.slice(0, fit)
   const more = icons.length - shown.length
   const body = shown
-    .map((ic, i) => rowCrab(W, i * 36, 0, ic.k, ic.dim, ic.s === 'running') + (ic.s === 'running' ? `<circle class="live" cx="${mx(W, i * 36 + 32)}" cy="4" r="3" fill="${ic.c}"/>` : ''))
+    .map((ic, i) => rowCrab(W, i * STRIP_STEP, 0, ic.k, ic.dim, ic.s === 'running') + (ic.s === 'running' ? `<circle class="live" cx="${mx(W, i * STRIP_STEP + 32)}" cy="4" r="3" fill="${ic.c}"/>` : ''))
     .join('')
-  const x = shown.length * 36 + (more ? 4 : 0)
+  const x = shown.length * STRIP_STEP + (more ? 4 : 0)
   return svg(
     W,
-    32,
-    `${body}${more ? `<text class="s" ${startText(W, x, 21, false)} font-family="${FONT}" font-size="12">+${more}</text>` : ''}
-<text class="s" ${endText(W, W, 21)} font-family="${FONT}" font-size="12" font-variant-numeric="tabular-nums">≈${fmtCost(t.cost)} · ${fmtTokens(t.tokens)} · ${fmtTime(t.time)}</text>`,
+    44,
+    `${body}${more ? `<text class="s" ${startText(W, x, 28, false)} font-family="${FONT}" font-size="12">+${more}</text>` : ''}
+<text class="s" ${endText(W, W, 28)} font-family="${FONT}" font-size="12" font-variant-numeric="tabular-nums">≈${fmtCost(t.cost)} · ${fmtTokens(t.tokens)} · ${fmtTime(t.time)}</text>`,
   )
 }
 
@@ -1839,7 +1842,7 @@ export const register: Register = (on, options) => {
       const rowH = (a: AgentRun): number => agentH(logLines(a, isLog).length + (said(a) ? 1 : 0))
       const shownDone = p.isDoneCollapsed ? [] : finished
       const lines = 1 + (isEmpty ? 1 : 0) + (running.length > 0 ? 1 : 0) + (finished.length > 0 ? 1 : 0) + (planned.length > 0 ? 1 : 0)
-      const gridH = headerHeight(title) + lines * LINE_H + [...running, ...shownDone].reduce((h, a) => h + rowH(a) + LINE_H, 0) + planned.length * 46
+      const gridH = headerHeight(title) + lines * LINE_H + [...running, ...shownDone].reduce((h, a) => h + rowH(a) + LINE_H, 0) + planned.length * 54
       return (
         <Box flexDirection="column">
           {/* The grid sizes the pane; the content is placed over it, as an
@@ -1865,7 +1868,7 @@ export const register: Register = (on, options) => {
               ])}
             {planned.length > 0 && section('h-plan', `${s.planned} · ${planned.length}`)}
             {planned.map(pl => (
-              <Svg key={`plan-${pl.n}`} source={plannedSvg(W, pl)} alt={`${pl.n}. ${pl.title}: ${s.isPlanned}`} width={W} height={46} />
+              <Svg key={`plan-${pl.n}`} source={plannedSvg(W, pl)} alt={`${pl.n}. ${pl.title}: ${s.isPlanned}`} width={W} height={54} />
             ))}
           </Box>
         </Box>
