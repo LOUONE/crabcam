@@ -74,23 +74,32 @@ const PARTY_H = 132
 const PARTY_SCALE = 0.9
 const PARTY_BIG = 1.2
 const FLOOR = 120
-const CONFETTI = 26
+const CONFETTI = 16
+// The whole celebration, in ms: four hops in a wave (4 × 0.64 s + 0.9 s of stagger) and one fall
+// of confetti (2.4 s + 1.2 s of stagger). Past it the drawing holds no animation at all.
+export const PARTY_MS = 3800
 
 const PARTY_CSS = `<style>
-/* Four hops, then the crabs stand still: up on an ease-out, down on an ease-in, a small settle at the end. */
-.hop{animation:hop .64s 4 both}
+/* Four hops, then still: up on an ease-out, down on an ease-in, a small settle at the end. */
+.hop{animation:hop .64s 4 both;will-change:transform}
 @keyframes hop{0%{transform:translateY(0);animation-timing-function:cubic-bezier(.25,.8,.45,1)}46%{transform:translateY(-10px);animation-timing-function:cubic-bezier(.55,0,.75,.2)}88%{transform:translateY(0);animation-timing-function:ease-out}94%{transform:translateY(-1.5px);animation-timing-function:ease-in}100%{transform:translateY(0)}}
-/* Confetti falls twice and is gone. */
-.cf{animation:fall 2.2s linear 2 both;transform-box:fill-box;transform-origin:center}
-@keyframes fall{0%{transform:translateY(-12px) rotate(0);opacity:0}15%{opacity:1}100%{transform:translateY(96px) rotate(200deg);opacity:0}}
+/* Confetti falls once and is gone. */
+.cf{animation:fall 2.4s linear 1 both;will-change:transform,opacity}
+@keyframes fall{0%{transform:translateY(-12px);opacity:0}12%{opacity:1}80%{opacity:1}100%{transform:translateY(100px);opacity:0}}
 @media (prefers-reduced-motion: reduce){.hop,.cf{animation:none}.cf{opacity:.7}}
 </style>`
 
 const secs = (n: number): string => `${+n.toFixed(3)}s`
 
-// The end-of-flow celebration: the crabs hop four times in a wave under confetti that falls twice.
-export const partySvg = (W: number, agents: AgentRun[], at: number): [string, number] => {
+// The end-of-flow celebration: the crabs hop four times in a wave under confetti that falls once.
+// The panel redraws now and then, and a redrawn SVG starts its CSS animations over. So the
+// drawing is told how long the party has been going (`elapsedMs`): each delay is shifted back
+// by it, which resumes every animation where it was, and once the party is over the drawing
+// carries no animation at all, so nothing can start again.
+export const partySvg = (W: number, agents: AgentRun[], at: number, elapsedMs = 0): [string, number] => {
   if (!agents.length) return ['', 0]
+  const isOver = !(elapsedMs < PARTY_MS)
+  const gone = Math.max(0, elapsedMs) / 1000
   const s = tr()
   const H = PARTY_H
   const rtl = isRtl()
@@ -101,11 +110,11 @@ export const partySvg = (W: number, agents: AgentRun[], at: number): [string, nu
   // Confetti, deterministic, clipped to the card. The rotation sits on the rect so the
   // CSS transform of the falling group does not replace it.
   const colors = [...Object.values(KIND_COLOR), ACCENT, DONE]
-  const confetti = Array.from({ length: CONFETTI }, (_, i) => {
+  const confetti = isOver ? '' : Array.from({ length: CONFETTI }, (_, i) => {
     const x = Math.round((6 + noise(i, 1) * Math.max(0, W - 16)) * 10) / 10
     const y = Math.round(noise(i, 2) * 60 * 10) / 10
     const r = Math.round(noise(i, 4) * 360)
-    return `<g class="cf" style="animation-delay:${secs(noise(i, 3) * 1.2)}"><rect x="${x}" y="${y}" width="4" height="7" rx="1" fill="${colors[i % colors.length]}" transform="rotate(${r} ${x + 2} ${y + 3.5})"/></g>`
+    return `<g class="cf" style="animation-delay:${secs(noise(i, 3) * 1.2 - gone)}"><rect x="${x}" y="${y}" width="4" height="7" rx="1" fill="${colors[i % colors.length]}" transform="rotate(${r} ${x + 2} ${y + 3.5})"/></g>`
   }).join('')
 
   // The crabs, oldest first; when they do not all fit, as many as fit then "+N".
@@ -132,12 +141,12 @@ export const partySvg = (W: number, agents: AgentRun[], at: number): [string, nu
       const x = Math.round((PAD + i * step + Math.max(0, step - cw) / 2) * 100) / 100
       const isFailed = a.status === 'failed'
       const g = crab(mx(W, x, cw), cy, costumeOf(a.type), isFailed, false, scale, rtl)
-      return isFailed ? `<g>${g}</g>` : `<g class="hop" style="animation-delay:${secs(Math.min(0.9, i * 0.09))}">${g}</g>`
+      return isFailed || isOver ? `<g>${g}</g>` : `<g class="hop" style="animation-delay:${secs(Math.min(0.9, i * 0.09) - gone)}">${g}</g>`
     })
     .join('')
 
   const body =
-    PARTY_CSS +
+    (isOver ? '' : PARTY_CSS) +
     `<defs><clipPath id="pc"><rect x="0.5" y="0.5" width="${W - 1}" height="${H - 1}" rx="12"/></clipPath></defs>` +
     `<g clip-path="url(#pc)">${confetti}</g>` +
     `<rect x="${mx(W, 0, 4)}" y="14" width="4" height="${H - 28}" rx="2" fill="${DONE}"/>` +

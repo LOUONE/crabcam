@@ -1652,6 +1652,15 @@ export const register: Register = (on, options) => {
       await update($, agents, list => list.filter(a => a.status === 'running'))
     }
     const next = await update($, flow, p => merge(p, input))
+    if (input.finished === true) {
+      // When the flow closed: the party's hops are timed from here.
+      try {
+        const closedAt = await $.clock.now()
+        await update($, flow, p => (p ? { ...p, finishedAt: closedAt } : p))
+      } catch {
+        // No clock: the party is then timed from the last agent's end.
+      }
+    }
     if (next && input.tasks?.length) await (isOncePerFlow() ? autoOpen($, next.title) : openIfClosed($))
     return { result: `ok: ${label(next ?? blank())}` }
   })
@@ -1878,6 +1887,18 @@ export const register: Register = (on, options) => {
     const sel = p.selected ? list.find(a => a.id === p.selected) : undefined
     // The end of a flow: every agent finished and the flow closed.
     const isParty = f !== null && f.isFinished && list.length > 0 && !list.some(a => a.status === 'running')
+    // How long the party has been going, by the clock and not by the last recorded event, so a
+    // later redraw resumes the hops where they were, or finds them over, instead of replaying them.
+    let partyElapsed = 0
+    if (isParty) {
+      let live = at
+      try {
+        live = await $.clock.now()
+      } catch {
+        // No clock: the last known time.
+      }
+      partyElapsed = Math.max(0, live - Math.max(f?.finishedAt ?? 0, ...list.map(a => a.endedAt ?? 0)))
+    }
 
     // One agent up close: what it is on, the narrator's sentence, its files and its calls.
     if (sel) {
@@ -2071,7 +2092,7 @@ export const register: Register = (on, options) => {
         )
       }
 
-      const [partySrc, partyH] = isParty ? partySvg(W, list, at) : ['', 0]
+      const [partySrc, partyH] = isParty ? partySvg(W, list, at, partyElapsed) : ['', 0]
       const party = partySrc ? <Svg key="party" source={partySrc} alt={`${s.allDone}: ${list.length} ${s.agentsCount}, ${summary}`} width={W} height={partyH} /> : null
       const isLog = p.isLogOpen === true
       const rowH = (a: AgentRun): number => agentH(logLines(a, isLog).length + (said(a) ? 1 : 0))

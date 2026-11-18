@@ -13,6 +13,8 @@ export type Flow = {
   running: number
   phase: Phase
   isFinished: boolean
+  /** When the flow was closed, by the clock. */
+  finishedAt?: number
   tasks: PlannedTask[]
 }
 

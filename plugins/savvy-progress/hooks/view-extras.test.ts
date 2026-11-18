@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import type { AgentRun } from '../types'
-import { partySvg, saidSvg } from './views/extras'
+import { PARTY_MS, partySvg, saidSvg } from './views/extras'
 
 const run = (i: number, over: Partial<AgentRun> = {}): AgentRun => ({
   id: `a${i}`,
@@ -69,13 +69,13 @@ test('party: nothing for an empty list', async () => {
   expect(partySvg(400, [], 60_000)).toEqual(['', 0])
 })
 
-test('party: one hopping crab per agent, 26 confetti, reduced motion', async () => {
+test('party: one hopping crab per agent, 16 confetti, reduced motion', async () => {
   const agents = Array.from({ length: 3 }, (_, i) => run(i))
   const [src, h] = partySvg(400, agents, 60_000)
   expect(h).toBe(132)
   expect(count(src, /class="hop"/g)).toBe(3)
-  expect(count(src, /class="cf"/g)).toBe(26)
-  expect(count(src, /width="4" height="7" rx="1"/g)).toBe(26)
+  expect(count(src, /class="cf"/g)).toBe(16)
+  expect(count(src, /width="4" height="7" rx="1"/g)).toBe(16)
   expect(src).toMatch(/<clipPath id="pc">/)
   expect(src).toMatch(/prefers-reduced-motion: reduce\)\{\.hop,\.cf\{animation:none\}/)
   expect(src).toMatch(/3 agents/)
@@ -99,10 +99,27 @@ test('party: W=240 has no NaN or negative width', async () => {
   expect(src).not.toMatch(/width="-/)
 })
 
-test('party: the hop runs four times and stops, delays are never negative', async () => {
+test('party: at its start the hop runs four times and confetti falls once, delays not negative', async () => {
   const [src] = partySvg(400, [run(0), run(1), run(2)], 60_000)
-  expect(src).toMatch(/\.hop\{animation:hop \.64s 4 both\}/)
-  expect(src).toMatch(/\.cf\{animation:fall 2\.2s linear 2 both/)
+  expect(src).toMatch(/\.hop\{animation:hop \.64s 4 both/)
+  expect(src).toMatch(/\.cf\{animation:fall 2\.4s linear 1 both/)
   expect(src).not.toMatch(/\.(hop|cf)\{[^}]*infinite/)
   expect(src).not.toMatch(/style="animation-delay:-/)
+})
+
+test('party: a redraw mid-way resumes the hops instead of replaying them', async () => {
+  const [src] = partySvg(400, [run(0), run(1), run(2)], 60_000, 1000)
+  // Every delay is shifted back by the second already played: the first crab's 0 s becomes -1 s.
+  expect(src).toMatch(/class="hop" style="animation-delay:-1s"/)
+  expect(count(src, /class="hop"/g)).toBe(3)
+})
+
+test('party: once over, the drawing holds no party animation at all', async () => {
+  for (const elapsed of [PARTY_MS, PARTY_MS + 1, 600_000]) {
+    const [src, h] = partySvg(400, [run(0), run(1), run(2)], 60_000, elapsed)
+    expect(count(src, /class="hop"/g)).toBe(0)
+    expect(count(src, /class="cf"/g)).toBe(0)
+    expect(src).not.toMatch(/@keyframes (hop|fall)/)
+    expect(h).toBe(132)
+  }
 })
