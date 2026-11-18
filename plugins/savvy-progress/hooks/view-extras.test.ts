@@ -98,3 +98,11 @@ test('party: W=240 has no NaN or negative width', async () => {
   expect(src).not.toMatch(/NaN/)
   expect(src).not.toMatch(/width="-/)
 })
+
+test('party: the hop runs four times and stops, delays are never negative', async () => {
+  const [src] = partySvg(400, [run(0), run(1), run(2)], 60_000)
+  expect(src).toMatch(/\.hop\{animation:hop \.64s 4 both\}/)
+  expect(src).toMatch(/\.cf\{animation:fall 2\.2s linear 2 both/)
+  expect(src).not.toMatch(/\.(hop|cf)\{[^}]*infinite/)
+  expect(src).not.toMatch(/style="animation-delay:-/)
+})
