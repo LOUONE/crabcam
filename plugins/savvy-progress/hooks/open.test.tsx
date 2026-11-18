@@ -3,7 +3,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
 const PLUGIN = 'savvy-progress'
-const band = { hasSurvey: false, isWorking: false, maxRows: 4, bodyColumns: 100, scroll: { offset: 0, bodyRows: 4 }, view: {} }
+const band = { hasSurvey: false, isCollapsed: false, isWorking: false, maxRows: 4, bodyColumns: 100, scroll: { offset: 0, bodyRows: 4 }, view: {} }
 
 // A session where the pane's open state is tracked like the host's: `opened` lists each open.
 const host = (on: On) => {
@@ -17,7 +17,7 @@ const host = (on: On) => {
   on('ui.panes', () => ({ value: state.isOpen ? [{ id: 'savvy-agents' }] : [] }) as never)
   // Stands for Claude Code's own drawing beneath the band.
   on('ui.render', ($, e) => {
-    const { Text } = $.ui.resolve(e as never)
+    const { Text } = $.ui.resolve(e as never) as unknown as { Text: (p: { children?: unknown }) => null }
     return <Text>prompt</Text>
   })
   on('agent.spawn', (_$, e) => ({ model: 'claude-sonnet-5-5', agentId: (e as { tool_use_id: string }).tool_use_id }) as never)

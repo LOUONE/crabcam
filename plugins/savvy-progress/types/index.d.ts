@@ -27,6 +27,7 @@ export type ActivityEvent = {
   kind: ActivityKind
   target: string
   text: string
+  isError?: boolean
 }
 
 /** A file an agent read or edited. */
@@ -43,6 +44,15 @@ export type Narration = {
   at: number
   upTo: number
 }
+
+/** One point of an agent's cost and context over time. */
+export type Sample = { at: number; costUsd: number; ctx: number }
+
+/** A file edited by more than one agent: the runs' ids. */
+export type Conflict = { path: string; agents: string[] }
+
+/** Which view the panel shows. */
+export type PanelView = 'list' | 'lanes' | 'office' | 'files'
 
 export type AgentRun = {
   id: string
@@ -72,6 +82,14 @@ export type AgentRun = {
   files?: FileTouch[]
   narration?: Narration
   narratorUsd?: number
+  /** Tool calls that came back as errors. */
+  errorCount?: number
+  /** Set while the agent repeats one failing call. */
+  loop?: { text: string; count: number }
+  /** The agent's own latest words between tool calls, and a few before them. */
+  said?: { text: string; at: number }
+  thoughts?: { text: string; at: number }[]
+  samples?: Sample[]
 }
 
 export type Panel = {
@@ -83,6 +101,7 @@ export type Panel = {
   /** The agent open in detail, by its run id. */
   selected?: string
   autoOpenedFor: string
+  view?: PanelView
 }
 
 declare module 'claude-code' {

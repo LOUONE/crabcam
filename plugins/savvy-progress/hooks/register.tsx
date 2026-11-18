@@ -29,8 +29,8 @@ const TIERS: readonly string[] = ['fable', 'heavy', 'careful', 'medium', 'light'
 const MAX_TASKS = 200
 const MAX_AFTER = 20
 const MAX_TITLE = 120
-const ACCENT = '#8f8cf4'
-const DONE = '#5fbf8f'
+export const ACCENT = '#8f8cf4'
+export const DONE = '#5fbf8f'
 
 type ProgressInput = {
   title?: string
@@ -98,6 +98,21 @@ const STRINGS = {
     actions: "actions",
     progress: "Progress",
     more: "more",
+    viewList: "List",
+    viewLanes: "Lanes",
+    viewOffice: "Office",
+    viewFiles: "File map",
+    library: "Library",
+    workshop: "Workshop",
+    lab: "Lab",
+    lounge: "Lounge",
+    said: "In its own words",
+    errors: "errors",
+    looping: "going in circles",
+    conflict: "Edited by several agents",
+    costCurve: "Cost and context",
+    allDone: "All accepted",
+    noData: "Not enough data yet.",
     ctx: 'ctx',
     tier: { light: 'light', medium: 'medium', careful: 'careful', heavy: 'heavy', fable: 'fable', other: 'other' },
     effort: { low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' },
@@ -152,6 +167,21 @@ const STRINGS = {
     actions: "actions",
     progress: "Progression",
     more: "autres",
+    viewList: "Liste",
+    viewLanes: "Couloirs",
+    viewOffice: "Bureau",
+    viewFiles: "Carte des fichiers",
+    library: "Bibliothèque",
+    workshop: "Atelier",
+    lab: "Labo",
+    lounge: "Salon",
+    said: "Ce qu’il dit",
+    errors: "erreurs",
+    looping: "tourne en rond",
+    conflict: "Modifié par plusieurs agents",
+    costCurve: "Coût et contexte",
+    allDone: "Tout est accepté",
+    noData: "Pas encore assez de données.",
     ctx: 'ctx',
     tier: { light: 'light', medium: 'medium', careful: 'careful', heavy: 'heavy', fable: 'fable', other: 'autre' },
     effort: { low: 'bas', medium: 'moyen', high: 'haut', xhigh: 'très haut', max: 'max' },
@@ -206,6 +236,21 @@ const STRINGS = {
     actions: "действий",
     progress: "Ход работы",
     more: "ещё",
+    viewList: "Список",
+    viewLanes: "Дорожки",
+    viewOffice: "Офис",
+    viewFiles: "Карта файлов",
+    library: "Библиотека",
+    workshop: "Мастерская",
+    lab: "Лаборатория",
+    lounge: "Гостиная",
+    said: "Его словами",
+    errors: "ошибок",
+    looping: "ходит по кругу",
+    conflict: "Изменён несколькими агентами",
+    costCurve: "Стоимость и контекст",
+    allDone: "Всё принято",
+    noData: "Пока мало данных.",
     ctx: 'ctx',
     tier: { light: 'light', medium: 'medium', careful: 'careful', heavy: 'heavy', fable: 'fable', other: 'other' },
     effort: { low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' },
@@ -260,6 +305,21 @@ const STRINGS = {
     actions: "פעולות",
     progress: "התקדמות",
     more: "נוספים",
+    viewList: "רשימה",
+    viewLanes: "מסלולים",
+    viewOffice: "משרד",
+    viewFiles: "מפת קבצים",
+    library: "ספרייה",
+    workshop: "סדנה",
+    lab: "מעבדה",
+    lounge: "טרקלין",
+    said: "במילים שלו",
+    errors: "שגיאות",
+    looping: "מסתובב במעגלים",
+    conflict: "נערך על ידי כמה סוכנים",
+    costCurve: "עלות והקשר",
+    allDone: "הכול אושר",
+    noData: "אין עדיין מספיק נתונים.",
     ctx: 'הקשר',
     tier: { light: 'קל', medium: 'בינוני', careful: 'זהיר', heavy: 'כבד', fable: 'פייבל', other: 'אחר' },
     effort: { low: 'נמוך', medium: 'בינוני', high: 'גבוה', xhigh: 'גבוה מאוד', max: 'מקסימלי' },
@@ -268,13 +328,13 @@ const STRINGS = {
 
 // Module scope is fine here: session.start sets it again on every (re)load.
 let lang: Lang = 'en'
-const tr = () => STRINGS[lang]
+export const tr = () => STRINGS[lang]
 
 // Hebrew draws every row mirrored: crab and title on the right, numbers on the left.
-const isRtl = () => lang === 'he'
+export const isRtl = () => lang === 'he'
 
 // Tier and effort words as shown; anything unknown shows as it came.
-const tierWord = (tier: string): string => (tr().tier as Record<string, string>)[tier] ?? tier
+export const tierWord = (tier: string): string => (tr().tier as Record<string, string>)[tier] ?? tier
 const effortWord = (effort: string): string => (tr().effort as Record<string, string>)[effort] ?? effort
 
 const isFrench = (v: unknown): boolean => typeof v === 'string' && /^(fr|french|fran)/i.test(v.trim())
@@ -353,7 +413,7 @@ const label = (f: Flow): string => {
 const ratio = (f: Flow): number => (f.isFinished ? 1 : f.total ? f.done / f.total : 0)
 
 // Deterministic noise so the dither does not shimmer between redraws.
-const noise = (x: number, y: number): number => {
+export const noise = (x: number, y: number): number => {
   const s = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453
   return s - Math.floor(s)
 }
@@ -365,14 +425,14 @@ const H = 22
 const BAR_H = 16
 const CRAB_W = 26
 // The crab's drawing grid is 30 units wide, props included.
-const CRAB_BOX = 30
+export const CRAB_BOX = 30
 const CELL = 3
-const FONT = "-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',sans-serif"
+export const FONT = "-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',sans-serif"
 
-const xml = (s: string): string =>
+export const xml = (s: string): string =>
   s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c)
 
-const clip = (s: string, max: number): string => (s.length > max ? s.slice(0, Math.max(1, max - 1)) + '…' : s)
+export const clip = (s: string, max: number): string => (s.length > max ? s.slice(0, Math.max(1, max - 1)) + '…' : s)
 
 // CJK, fullwidth forms and emoji advance about 1em; at 0.56em a Chinese title was sized at half its width and the bar drew over it.
 // 中日韩文字、全角标点和 emoji 约占 1em；按 0.56em 算时中文标题宽度被低估近一半，进度条会压到标题上。
@@ -383,10 +443,10 @@ const WIDE =
 const charEm = (ch: string): number =>
   WIDE.test(ch) ? 1 : /[\s.,:;'|!il1()[\]]/.test(ch) ? 0.3 : /[A-ZА-ЯЁmwшщжюМШЩЖЮ@%]/.test(ch) ? 0.72 : 0.56
 
-const textWidth = (s: string, size: number): number => [...s].reduce((w, ch) => w + charEm(ch) * size, 0)
+export const textWidth = (s: string, size: number): number => [...s].reduce((w, ch) => w + charEm(ch) * size, 0)
 
 // Cuts `s` to fit `maxW` pixels, with an ellipsis when it had to cut.
-const fitText = (s: string, size: number, maxW: number): string => {
+export const fitText = (s: string, size: number, maxW: number): string => {
   if (textWidth(s, size) <= maxW) return s
   let out = ''
   for (const ch of s) {
@@ -490,7 +550,7 @@ const TIER_COLOR: Record<string, string> = {
 }
 
 // What each savvy tier runs on, for planned tasks that have no run yet.
-const colorOf = (tier: string): string => TIER_COLOR[tier] ?? '#888780'
+export const colorOf = (tier: string): string => TIER_COLOR[tier] ?? '#888780'
 
 const TIER_MODEL: Record<string, [model: string, effort: string]> = {
   fable: ['Fable', 'high'],
@@ -507,7 +567,7 @@ const tierModel = (tier: string): string => {
 }
 
 // "Opus 5.5 · low" for a run, or just the model when no effort was seen.
-const runModel = (a: AgentRun): string => (a.effort ? `${modelName(a.model)} · ${effortWord(a.effort)}` : modelName(a.model))
+export const runModel = (a: AgentRun): string => (a.effort ? `${modelName(a.model)} · ${effortWord(a.effort)}` : modelName(a.model))
 
 // USD per million tokens: input, output, cache read, cache write. The first row that
 // matches a model id wins, so a release sits above its family.
@@ -564,13 +624,13 @@ const costOf = (model: string, u: Usage, isRequest: boolean): number => {
 const windowOf = (model: string): number => (/haiku-4|claude-3/i.test(model) ? 200_000 : 1_000_000)
 
 // `savvy-careful`, or `savvy-flow:savvy-careful` when the agents ship in a plugin.
-const tierOf = (type: string): string => {
+export const tierOf = (type: string): string => {
   const bare = type.replace(/^[^:]*:/, '')
   const t = bare.replace(/^savvy-/, '').toLowerCase()
   return Object.hasOwn(TIER_COLOR, t) && bare.startsWith('savvy-') ? t : 'other'
 }
 
-const modelName = (id: string): string => {
+export const modelName = (id: string): string => {
   const m = /(fable|mythos|opus|sonnet|haiku)-(\d+)(?:-(\d{1,2})(?!\d))?/i.exec(id)
   const [, family = '', major = '', minor] = m ?? []
   if (!family) return id.replace(/^claude-/, '').replace(/\[.*\]$/, '') || '—'
@@ -579,12 +639,12 @@ const modelName = (id: string): string => {
 
 const norm = (s: string): string => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
 
-const fmtTokens = (n: number): string =>
+export const fmtTokens = (n: number): string =>
   n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : `${Math.round(n)}`
 
-const fmtCost = (usd: number): string => `$${usd < 10 ? usd.toFixed(2) : usd.toFixed(1)}`
+export const fmtCost = (usd: number): string => `$${usd < 10 ? usd.toFixed(2) : usd.toFixed(1)}`
 
-const fmtTime = (ms: number): string => {
+export const fmtTime = (ms: number): string => {
   const s = Math.max(0, Math.round(ms / 1000))
   const h = Math.floor(s / 3600)
   const m = Math.floor((s % 3600) / 60)
@@ -592,7 +652,7 @@ const fmtTime = (ms: number): string => {
   return h ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`
 }
 
-const elapsed = (a: AgentRun, at: number): number => (a.endedAt ?? Math.max(at, a.startedAt)) - a.startedAt
+export const elapsed = (a: AgentRun, at: number): number => (a.endedAt ?? Math.max(at, a.startedAt)) - a.startedAt
 
 // --- live activity: what each subagent actually does, read from its tool calls.
 // The engine reports every call; nothing here asks the model for anything, so it costs no tokens.
@@ -603,7 +663,7 @@ const LOG_OPEN_LINES = 4
 const LOG_LINE = 14
 const IDLE_MS = 60_000
 
-const lastSegments = (p: string): string => p.split('/').filter(Boolean).slice(-2).join('/')
+export const lastSegments = (p: string): string => p.split('/').filter(Boolean).slice(-2).join('/')
 
 const strOf = (e: Record<string, unknown>, k: string): string => (typeof e[k] === 'string' ? (e[k] as string) : '')
 
@@ -629,8 +689,8 @@ const toolName = (e: Record<string, unknown>): string => String(e.tool ?? '?').r
 // One short line for a tool call: "Read src/foo.ts", "Bash npm test", "Grep useEffect".
 const activityOf = (e: Record<string, unknown>): string => clip(`${toolName(e)} ${targetOf(e)}`.trim(), 80)
 
-const KINDS: readonly ActivityKind[] = ['explore', 'edit', 'run', 'web', 'agent', 'other']
-const KIND_COLOR: Record<ActivityKind, string> = {
+export const KINDS: readonly ActivityKind[] = ['explore', 'edit', 'run', 'web', 'agent', 'other']
+export const KIND_COLOR: Record<ActivityKind, string> = {
   explore: '#378ADD',
   edit: '#D85A30',
   run: '#1D9E75',
@@ -638,8 +698,11 @@ const KIND_COLOR: Record<ActivityKind, string> = {
   agent: '#BA7517',
   other: '#888780',
 }
-const KIND_GLYPH: Record<ActivityKind, string> = { explore: '◎', edit: '✎', run: '▶', web: '◍', agent: '⇢', other: '·' }
-const kindWord = (k: ActivityKind): string => (tr() as unknown as Record<string, string>)[`k_${k}`] ?? k
+export const KIND_GLYPH: Record<ActivityKind, string> = { explore: '◎', edit: '✎', run: '▶', web: '◍', agent: '⇢', other: '·' }
+// One hue per agent, by its index in the list sorted by start time.
+const AGENT_PALETTE = ['#378ADD', '#D85A30', '#1D9E75', '#7F77DD', '#BA7517', '#C2528B', '#3AA6A6', '#8A8F3C'] as const
+export const agentColor = (i: number): string => AGENT_PALETTE[((i % AGENT_PALETTE.length) + AGENT_PALETTE.length) % AGENT_PALETTE.length] ?? '#888780'
+export const kindWord = (k: ActivityKind): string => (tr() as unknown as Record<string, string>)[`k_${k}`] ?? k
 
 // A shell command that only looks around counts as exploring, not running.
 const LOOKING = /^\s*(cat|ls|find|grep|rg|head|tail|wc|sed -n|tree|pwd|file|stat|git (log|status|diff|show|blame))\b/
@@ -674,7 +737,7 @@ const touchFile = (files: FileTouch[], path: string, kind: ActivityKind, at: num
   return [next, ...files.filter(f => f.path !== path)].slice(0, MAX_FILES)
 }
 
-const eventsOf = (a: AgentRun): ActivityEvent[] =>
+export const eventsOf = (a: AgentRun): ActivityEvent[] =>
   a.events ?? (a.activity ?? []).map(text => ({ at: a.startedAt, tool: text.split(' ')[0] ?? '', kind: 'other' as const, target: '', text }))
 
 // The lines a row shows: the last few with the log open, else the latest one of a running agent.
@@ -687,7 +750,7 @@ const idleMs = (a: AgentRun, at: number): number =>
   a.status === 'running' && eventsOf(a).length ? Math.max(0, at - (a.activityAt ?? a.startedAt)) : 0
 
 // What the agent is on now: the kind of its latest call, and since when it has kept to it.
-const phaseOf = (a: AgentRun): { kind: ActivityKind; since: number } | null => {
+export const phaseOf = (a: AgentRun): { kind: ActivityKind; since: number } | null => {
   const evs = eventsOf(a)
   const last = evs[evs.length - 1]
   if (!last) return null
@@ -696,7 +759,7 @@ const phaseOf = (a: AgentRun): { kind: ActivityKind; since: number } | null => {
   return { kind: last.kind, since }
 }
 
-const kindCounts = (evs: ActivityEvent[]): [ActivityKind, number][] =>
+export const kindCounts = (evs: ActivityEvent[]): [ActivityKind, number][] =>
   KINDS.map(k => [k, evs.filter(ev => ev.kind === k).length] as [ActivityKind, number]).filter(([, n]) => n > 0)
 
 // A strip of the agent's calls, one block each, coloured by kind: how its work has gone so far.
@@ -775,7 +838,7 @@ const plannedOf = (f: Flow | null, list: AgentRun[]): Planned[] => {
   return (f.tasks ?? []).map((t, i) => ({ ...t, n: i + 1 })).filter(t => !started.has(norm(t.title)))
 }
 
-const totals = (list: AgentRun[], at: number) => {
+export const totals = (list: AgentRun[], at: number) => {
   const cost = list.reduce((s, a) => s + a.costUsd, 0)
   const tokens = list.reduce((s, a) => s + a.tokens, 0)
   const start = Math.min(...list.map(a => a.startedAt))
@@ -800,7 +863,7 @@ const gridSvg = (W: number, H: number) => `<svg xmlns="http://www.w3.org/2000/sv
 <rect width="${W}" height="${H}" fill="url(#g)"/>
 </svg>`
 
-const PANE_CSS = `<style>
+export const PANE_CSS = `<style>
 .t{fill:#1f1f1f}.s{fill:#6b6b68}.m{fill:#9a9a96}.k{fill:#ecebe8}.ln{stroke:#e4e4e1}.tile{fill:#f4f3f0}
 @media (prefers-color-scheme: dark){.t{fill:#ececec}.s{fill:#a8a8a4}.m{fill:#7d7d79}.k{fill:#2c2c2b}.ln{stroke:#333331}.tile{fill:#262625}}
 .live{animation:p 1.6s ease-in-out infinite}@keyframes p{50%{opacity:.3}}
@@ -809,8 +872,8 @@ const PANE_CSS = `<style>
 
 // Pixel Clawd from DockCrab (Clawdy): a 24×18 crab on a 30×28 grid, one costume per tier.
 // The body keeps the brand clay; the tier's color lives in the costume's accent.
-const CLAY = '#D97757'
-const INK = '#1F1E1D'
+export const CLAY = '#D97757'
+export const INK = '#1F1E1D'
 
 // `cls` puts a pixel in a named group: `bd` (the default) is the body and its
 // costume, `la`/`lb` the leg pairs, anything else a prop with its own motion.
@@ -835,7 +898,7 @@ const crabBody = (f: Fill, armFront = 0, armCls?: string): void => {
 // Pure CSS, run by the compositor: no redraws. Periods divide one second, so the
 // once-a-second redraw of a running row restarts them in phase. Every crab walks;
 // each costume adds its prop's own motion on top.
-const CRAB_CSS = `<style>
+export const CRAB_CSS = `<style>
 .run .la{animation:st .5s steps(1) infinite}.run .lb{animation:st .5s steps(1) infinite -.25s}
 .run .bd{animation:bob .5s steps(1) infinite -.125s}
 .run g{transform-box:fill-box}
@@ -940,7 +1003,7 @@ const COSTUMES: Record<string, (f: Fill, t: string) => void> = {
   },
 }
 
-const costumeOf = (type: string): string => (type === 'Explore' ? 'explore' : tierOf(type))
+export const costumeOf = (type: string): string => (type === 'Explore' ? 'explore' : tierOf(type))
 
 const STRIP_STEP = 50
 const CRAB_SCALE = 1.5
@@ -950,7 +1013,7 @@ const TEXT_X = Math.round(CRAB_BOX * CRAB_SCALE) + 9
 // Body and props nest inside `bd` so a prop rides the bob and adds its own motion;
 // legs stay outside it and step on their own. `mirror` flips the crab inside its
 // own box (x .. x + CRAB_BOX * scale) so it faces left.
-const crab = (x: number, y: number, costume: string, dim = false, isWalking = false, scale = CRAB_SCALE, mirror = false): string => {
+export const crab = (x: number, y: number, costume: string, dim = false, isWalking = false, scale = CRAB_SCALE, mirror = false): string => {
   const groups = new Map<string, string[]>([['bd', []]])
   const f: Fill = (cx, cy, w, h, c, cls = 'bd') => {
     if (!groups.has(cls)) groups.set(cls, [])
@@ -965,7 +1028,7 @@ const crab = (x: number, y: number, costume: string, dim = false, isWalking = fa
   return `<g transform="${place}" opacity="${dim ? 0.45 : 1}" shape-rendering="crispEdges"><g class="c-${costume}${isWalking ? ' run' : ''}">${body}${group('la')}${group('lb')}</g></g>`
 }
 
-const statusMark = (x: number, y: number, status: string, color: string): string => {
+export const statusMark = (x: number, y: number, status: string, color: string): string => {
   if (status === 'running') return `<circle class="live" cx="${x}" cy="${y}" r="3.5" fill="${color}"/>`
   if (status === 'done') return `<path d="M${x - 5} ${y}l3.5 3.5 6.5-7" fill="none" stroke="#3B9C5F" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>`
   if (status === 'failed') return `<path d="M${x - 4} ${y - 4}l8 8M${x + 4} ${y - 4}l-8 8" stroke="#D0453F" stroke-width="1.8" stroke-linecap="round"/>`
@@ -976,25 +1039,25 @@ const statusMark = (x: number, y: number, status: string, color: string): string
 // row (`mx`) and text hugs the mirrored side. `words` text may hold Hebrew and
 // takes `direction="rtl"` (whose `start` is the right edge); numbers stay
 // left to right so "≈$0.25" keeps its order.
-const mx = (W: number, x: number, w = 0): number => (isRtl() ? W - x - w : x)
+export const mx = (W: number, x: number, w = 0): number => (isRtl() ? W - x - w : x)
 
 // Text that starts at x: left-aligned, or right-aligned at the mirrored x.
-const startText = (W: number, x: number, y: number, words = true): string =>
+export const startText = (W: number, x: number, y: number, words = true): string =>
   !isRtl()
     ? `x="${x}" y="${y}"`
     : `x="${W - x}" y="${y}"${words ? ' direction="rtl" text-anchor="start"' : ' text-anchor="end"'}`
 
 // Text that ends at x: right-aligned, or left-aligned at the mirrored x.
-const endText = (W: number, x: number, y: number, words = false): string =>
+export const endText = (W: number, x: number, y: number, words = false): string =>
   !isRtl() ? `x="${x}" y="${y}" text-anchor="end"` : `x="${W - x}" y="${y}"${words ? ' direction="rtl" text-anchor="end"' : ''}`
 
-const crabWidth = (scale: number): number => Math.round(CRAB_BOX * scale * 100) / 100
+export const crabWidth = (scale: number): number => Math.round(CRAB_BOX * scale * 100) / 100
 
 // A panel crab at x in a row of width W: on the mirrored side and facing left in Hebrew.
 const rowCrab = (W: number, x: number, y: number, costume: string, dim = false, isWalking = false): string =>
   crab(mx(W, x, crabWidth(CRAB_SCALE)), y, costume, dim, isWalking, CRAB_SCALE, isRtl())
 
-const svg = (W: number, H: number, body: string): string =>
+export const svg = (W: number, H: number, body: string): string =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${PANE_CSS}${CRAB_CSS}${body}</svg>`
 
 // The pane's own title already says "Agents": the header names the flow, if any.
@@ -1024,7 +1087,7 @@ const progressOf = (a: AgentRun): number | null => {
   return null
 }
 
-const ctxOf = (a: AgentRun): number => (a.contextMax ? Math.min(100, Math.round((a.contextTokens / a.contextMax) * 100)) : 0)
+export const ctxOf = (a: AgentRun): number => (a.contextMax ? Math.min(100, Math.round((a.contextTokens / a.contextMax) * 100)) : 0)
 
 const agentH = (lines: number): number => 66 + (lines ? lines * LOG_LINE + 4 : 0)
 
@@ -1073,16 +1136,16 @@ ${log}
 
 // --- Details on the desktop: one card per part, drawn as SVG like the rest of the panel.
 // Drawing costs nothing: only the narrator's sentence ever comes from a model.
-const DETAIL_CSS = `<style>
+export const DETAIL_CSS = `<style>
 .card{fill:#fbfaf8;stroke:#e6e5e1}.chip{fill:#f1f0ec}
 @media (prefers-color-scheme: dark){.card{fill:#1e1e1d;stroke:#34342f}.chip{fill:#2a2a28}}
 </style>`
 
-const cardSvg = (W: number, H: number, body: string): string =>
+export const cardSvg = (W: number, H: number, body: string): string =>
   svg(W, H, `${DETAIL_CSS}<rect class="card" x="0.5" y="0.5" width="${W - 1}" height="${H - 1}" rx="12"/>${body}`)
 
 // Splits text into lines that fit `maxW`, at most `maxLines`, the last cut with an ellipsis.
-const wrapText = (text: string, size: number, maxW: number, maxLines: number): string[] => {
+export const wrapText = (text: string, size: number, maxW: number, maxLines: number): string[] => {
   const words = text.split(/\s+/).filter(Boolean)
   const lines: string[] = []
   let cur = ''
@@ -1104,7 +1167,7 @@ const wrapText = (text: string, size: number, maxW: number, maxLines: number): s
   return lines.map(l => fitText(l, size, maxW))
 }
 
-const cardTitle = (W: number, text: string, right = ''): string =>
+export const cardTitle = (W: number, text: string, right = ''): string =>
   `<text class="t" ${startText(W, 16, 24)} font-family="${FONT}" font-size="12.5" font-weight="600">${xml(text)}</text>` +
   (right ? `<text class="m" ${endText(W, W - 16, 24)} font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${xml(right)}</text>` : '')
 
@@ -1196,8 +1259,8 @@ const progressSvg = (W: number, evs: ActivityEvent[]): [string, number] => {
   return [cardSvg(W, H, cardTitle(W, s.progress, `${evs.length} ${s.actions}`) + blocks + legend), H]
 }
 
-const dirOf = (path: string): string => path.split('/').filter(Boolean).slice(-4, -1).join('/')
-const baseOf = (path: string): string => path.split('/').filter(Boolean).pop() ?? path
+export const dirOf = (path: string): string => path.split('/').filter(Boolean).slice(-4, -1).join('/')
+export const baseOf = (path: string): string => path.split('/').filter(Boolean).pop() ?? path
 
 // The files the agent touched, the latest first: read or edited, how often, and when.
 const filesSvg = (W: number, files: FileTouch[], at: number, isRunning: boolean): [string, number] => {
