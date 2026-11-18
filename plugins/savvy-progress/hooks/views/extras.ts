@@ -75,27 +75,24 @@ const PARTY_SCALE = 0.9
 const PARTY_BIG = 1.2
 const FLOOR = 120
 const CONFETTI = 16
-// The whole celebration, in ms: four hops in a wave (4 × 0.64 s + 0.9 s of stagger) and one fall
-// of confetti (2.4 s + 1.2 s of stagger). Past it the drawing holds no animation at all.
-export const PARTY_MS = 3800
+// The whole celebration, in ms: one fall of confetti (2.4 s + 1.2 s of stagger). Past it the
+// drawing holds no animation at all. The crabs stand still throughout.
+export const PARTY_MS = 3600
 
 const PARTY_CSS = `<style>
-/* Four hops, then still: up on an ease-out, down on an ease-in, a small settle at the end. */
-.hop{animation:hop .64s 4 both;will-change:transform}
-@keyframes hop{0%{transform:translateY(0);animation-timing-function:cubic-bezier(.25,.8,.45,1)}46%{transform:translateY(-10px);animation-timing-function:cubic-bezier(.55,0,.75,.2)}88%{transform:translateY(0);animation-timing-function:ease-out}94%{transform:translateY(-1.5px);animation-timing-function:ease-in}100%{transform:translateY(0)}}
 /* Confetti falls once and is gone. */
 .cf{animation:fall 2.4s linear 1 both;will-change:transform,opacity}
 @keyframes fall{0%{transform:translateY(-12px);opacity:0}12%{opacity:1}80%{opacity:1}100%{transform:translateY(100px);opacity:0}}
-@media (prefers-reduced-motion: reduce){.hop,.cf{animation:none}.cf{opacity:.7}}
+@media (prefers-reduced-motion: reduce){.cf{animation:none;opacity:.7}}
 </style>`
 
 const secs = (n: number): string => `${+n.toFixed(3)}s`
 
-// The end-of-flow celebration: the crabs hop four times in a wave under confetti that falls once.
+// The end-of-flow celebration: the crabs line up, still, under confetti that falls once.
 // The panel redraws now and then, and a redrawn SVG starts its CSS animations over. So the
-// drawing is told how long the party has been going (`elapsedMs`): each delay is shifted back
-// by it, which resumes every animation where it was, and once the party is over the drawing
-// carries no animation at all, so nothing can start again.
+// drawing is told how long the party has been going (`elapsedMs`): each confetti's delay is
+// shifted back by it, which resumes the fall where it was, and once the party is over the
+// drawing carries no animation at all, so nothing can start again.
 export const partySvg = (W: number, agents: AgentRun[], at: number, elapsedMs = 0): [string, number] => {
   if (!agents.length) return ['', 0]
   const isOver = !(elapsedMs < PARTY_MS)
@@ -141,7 +138,7 @@ export const partySvg = (W: number, agents: AgentRun[], at: number, elapsedMs = 
       const x = Math.round((PAD + i * step + Math.max(0, step - cw) / 2) * 100) / 100
       const isFailed = a.status === 'failed'
       const g = crab(mx(W, x, cw), cy, costumeOf(a.type), isFailed, false, scale, rtl)
-      return isFailed || isOver ? `<g>${g}</g>` : `<g class="hop" style="animation-delay:${secs(Math.min(0.9, i * 0.09) - gone)}">${g}</g>`
+      return `<g>${g}</g>`
     })
     .join('')
 

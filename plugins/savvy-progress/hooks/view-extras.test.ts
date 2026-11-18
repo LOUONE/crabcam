@@ -69,57 +69,54 @@ test('party: nothing for an empty list', async () => {
   expect(partySvg(400, [], 60_000)).toEqual(['', 0])
 })
 
-test('party: one hopping crab per agent, 16 confetti, reduced motion', async () => {
-  const agents = Array.from({ length: 3 }, (_, i) => run(i))
-  const [src, h] = partySvg(400, agents, 60_000)
+test('party: one still crab per agent, 16 confetti, reduced motion', async () => {
+  const [src, h] = partySvg(400, [run(0), run(1), run(2)], 60_000)
   expect(h).toBe(132)
-  expect(count(src, /class="hop"/g)).toBe(3)
+  expect(count(src, /class="c-/g)).toBe(3)
+  expect(src).not.toMatch(/class="hop"|@keyframes hop/)
   expect(count(src, /class="cf"/g)).toBe(16)
   expect(count(src, /width="4" height="7" rx="1"/g)).toBe(16)
-  expect(src).toMatch(/<clipPath id="pc">/)
-  expect(src).toMatch(/prefers-reduced-motion: reduce\)\{\.hop,\.cf\{animation:none\}/)
-  expect(src).toMatch(/3 agents/)
+  expect(src).toMatch(/prefers-reduced-motion: reduce\)\{\.cf\{animation:none/)
 })
 
-test('party: a failed agent does not hop', async () => {
-  const [src] = partySvg(400, [run(1), run(2, { status: 'failed' })], 60_000)
-  expect(count(src, /class="hop"/g)).toBe(1)
-  expect(src).toMatch(/opacity="0.45"/)
+test('party: a failed agent still stands with the others', async () => {
+  const [src] = partySvg(400, [run(0), run(1, { status: 'failed' })], 60_000)
+  expect(count(src, /class="c-/g)).toBe(2)
 })
 
 test('party: 40 agents at W=300 end with +N', async () => {
-  const [src] = partySvg(300, Array.from({ length: 40 }, (_, i) => run(i)), 600_000)
-  expect(src).toMatch(/>\+\d+<\/text>/)
-  expect(count(src, /class="hop"/g)).toBeLessThan(40)
+  const [src] = partySvg(300, Array.from({ length: 40 }, (_, i) => run(i)), 60_000)
+  expect(src).toMatch(/>\+\d+</)
+  expect(count(src, /class="c-/g)).toBeLessThan(40)
 })
 
 test('party: W=240 has no NaN or negative width', async () => {
-  const [src] = partySvg(240, Array.from({ length: 8 }, (_, i) => run(i, { description: 'a<b & "c"' })), 60_000)
+  const [src] = partySvg(240, [run(0), run(1), run(2)], 60_000)
   expect(src).not.toMatch(/NaN/)
   expect(src).not.toMatch(/width="-/)
 })
 
-test('party: at its start the hop runs four times and confetti falls once, delays not negative', async () => {
+test('party: confetti falls once, delays not negative at the start', async () => {
   const [src] = partySvg(400, [run(0), run(1), run(2)], 60_000)
-  expect(src).toMatch(/\.hop\{animation:hop \.64s 4 both/)
   expect(src).toMatch(/\.cf\{animation:fall 2\.4s linear 1 both/)
-  expect(src).not.toMatch(/\.(hop|cf)\{[^}]*infinite/)
+  expect(src).not.toMatch(/\.cf\{[^}]*infinite/)
   expect(src).not.toMatch(/style="animation-delay:-/)
 })
 
-test('party: a redraw mid-way resumes the hops instead of replaying them', async () => {
-  const [src] = partySvg(400, [run(0), run(1), run(2)], 60_000, 1000)
-  // Every delay is shifted back by the second already played: the first crab's 0 s becomes -1 s.
-  expect(src).toMatch(/class="hop" style="animation-delay:-1s"/)
-  expect(count(src, /class="hop"/g)).toBe(3)
+test('party: a redraw mid-way resumes the fall instead of replaying it', async () => {
+  const [a] = partySvg(400, [run(0)], 60_000, 0)
+  const [b] = partySvg(400, [run(0)], 60_000, 1000)
+  const delays = (src: string) => [...src.matchAll(/class="cf" style="animation-delay:(-?[\d.]+)s"/g)].map(m => Number(m[1]))
+  expect(delays(b).length).toBe(16)
+  delays(b).forEach((d, i) => expect(Math.abs(d - ((delays(a)[i] ?? 0) - 1))).toBeLessThan(0.002))
 })
 
-test('party: once over, the drawing holds no party animation at all', async () => {
+test('party: once over, the drawing holds no animation of its own', async () => {
   for (const elapsed of [PARTY_MS, PARTY_MS + 1, 600_000]) {
     const [src, h] = partySvg(400, [run(0), run(1), run(2)], 60_000, elapsed)
-    expect(count(src, /class="hop"/g)).toBe(0)
     expect(count(src, /class="cf"/g)).toBe(0)
-    expect(src).not.toMatch(/@keyframes (hop|fall)/)
+    expect(src).not.toMatch(/@keyframes fall/)
+    expect(count(src, /class="c-/g)).toBe(3)
     expect(h).toBe(132)
   }
 })
