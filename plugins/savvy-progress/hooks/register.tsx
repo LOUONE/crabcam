@@ -1427,6 +1427,40 @@ async function autoOpen($: EngineInterface, key: string): Promise<void> {
   void $.ui.open({ id: PANE, title: tr().pane })
 }
 
+const MAX_THOUGHTS = 6
+const MAX_SAMPLES = 120
+const LOOP_MIN = 3
+
+// The agent's own words of one model request: whitespace collapsed, clipped; '' when it said nothing.
+const saidOf = (answer: unknown): string => (typeof answer === 'string' ? clip(answer.replace(/\s+/g, ' ').trim(), 400) : '')
+
+// The trailing run of identical failing calls, when it is long enough to call a loop.
+const loopOf = (events: ActivityEvent[]): AgentRun['loop'] => {
+  const last = events[events.length - 1]
+  if (!last || last.isError !== true) return undefined
+  let count = 0
+  for (let i = events.length - 1; i >= 0; i--) {
+    const ev = events[i]
+    if (!ev || ev.isError !== true || ev.text !== last.text) break
+    count++
+  }
+  return count >= LOOP_MIN ? { text: last.text, count } : undefined
+}
+
+// A finished call's outcome: on an error, marks the event this call appended (the latest
+// unmarked one with its `at` and `text`) and counts it; then the loop is recomputed.
+const withOutcome = (a: AgentRun, ref: { at: number; text: string }, isError: boolean): AgentRun => {
+  let events = eventsOf(a)
+  let errorCount = a.errorCount
+  if (isError) {
+    let i = events.length - 1
+    while (i >= 0 && !(events[i]?.at === ref.at && events[i]?.text === ref.text && events[i]?.isError !== true)) i--
+    if (i >= 0) events = events.map((ev, j) => (j === i ? { ...ev, isError: true } : ev))
+    errorCount = (errorCount ?? 0) + 1
+  }
+  return { ...a, events, errorCount, loop: loopOf(events) }
+}
+
 export const register: Register = (on, options) => {
   // `narrator` option: 'selected' (default) narrates the agent open in detail, 'all' every agent, 'off' none.
   // `autoOpen`: 'always' (default) opens the pane whenever a subagent starts and it is closed;
@@ -1523,10 +1557,12 @@ export const register: Register = (on, options) => {
   on('tool.call', async ($, e, next) => {
     const agentId = e.agentId
     const rec = e as unknown as Record<string, unknown>
+    let ref: { at: number; text: string } | undefined
     if (agentId && rec.tool !== STEP_TOOL) {
       try {
         const at = await $.clock.now()
         const ev = eventOf(rec, at)
+        ref = { at: ev.at, text: ev.text }
         const file = fileOf(rec)
         const list = await update($, agents, list =>
           list.map((a): AgentRun =>
@@ -1551,7 +1587,18 @@ export const register: Register = (on, options) => {
         // The panel is a view: a failed note must not stop the agent's call.
       }
     }
-    return next(e)
+    const result = await next(e)
+    if (agentId && ref) {
+      try {
+        // A `{ deny }` carries no isError: not counted as a failure.
+        const isError = (result as { isError?: boolean }).isError === true
+        const done = ref
+        await update($, agents, list => list.map((a): AgentRun => (a.agentId !== agentId ? a : withOutcome(a, done, isError))))
+      } catch {
+        // Bookkeeping only: the call's result goes back untouched.
+      }
+    }
+    return result
   })
 
   on('tool.call', { tool: TOOL }, async ($, e) => {
@@ -1649,14 +1696,30 @@ export const register: Register = (on, options) => {
     const result = yield* next(e)
     const agentId = e.agentId
     const usage = result.usage
-    if (!agentId || !usage) return result
+    const text = saidOf(result.answer)
+    if (!agentId || (!usage && !text)) return result
+
+    const at = await $.clock.now()
+    const said = text ? { text, at } : undefined
+    // The agent's own words, even on a step that reports no usage.
+    const withSaid = (a: AgentRun): AgentRun =>
+      said ? { ...a, said, thoughts: [...(a.thoughts ?? []), said].slice(-MAX_THOUGHTS) } : a
+    if (!usage) {
+      await update($, agents, list => list.map((a): AgentRun => (a.agentId !== agentId ? a : withSaid(a))))
+      return result
+    }
 
     const model = usage.model || e.model
+    // Cost and context after this step, kept as a sample for the curves.
+    const withSample = (a: AgentRun): AgentRun => ({
+      ...a,
+      samples: [...(a.samples ?? []), { at, costUsd: a.costUsd, ctx: ctxOf(a) }].slice(-MAX_SAMPLES),
+    })
     await update($, agents, list =>
       list.map((a): AgentRun =>
         a.agentId !== agentId
           ? a
-          : {
+          : withSample(withSaid({
               ...a,
               model,
               effort: typeof e.effort === 'string' ? e.effort : a.effort,
@@ -1676,7 +1739,7 @@ export const register: Register = (on, options) => {
                 (usage.cache_creation_input_tokens || 0),
               costUsd: a.costUsd + costOf(model, usage, true),
               steps: a.steps + 1,
-            },
+            })),
       ),
     )
     return result
