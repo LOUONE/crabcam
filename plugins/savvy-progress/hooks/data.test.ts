@@ -3,6 +3,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
 import type { AgentRun } from '../types'
+import { capSamples } from './register'
 
 const MODEL = 'claude-sonnet-5-5'
 const USAGE = { input_tokens: 1000, output_tokens: 100, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
@@ -98,7 +99,7 @@ test('said: recorded on a step without usage, cost untouched', async ($, on) => 
   expect(a.samples ?? []).toEqual([])
 })
 
-test('samples: one per step with cumulative cost and context, capped at 120', async ($, on) => {
+test('samples: one per step with cumulative cost and context, at most 120, the first kept', async ($, on) => {
   await worker($, on)
   await step($)
   await step($)
@@ -109,10 +110,26 @@ test('samples: one per step with cumulative cost and context, capped at 120', as
   expect(a.samples?.[1]?.ctx).toBeGreaterThanOrEqual(0)
   expect(a.samples?.[1]?.ctx).toBeLessThanOrEqual(100)
 
+  const first = a.samples?.[0]
   for (let i = 0; i < 125; i++) await step($)
   a = await agent($)
-  expect(a.samples?.length).toBe(120)
-  expect(a.samples?.[119]?.costUsd).toBe(a.costUsd)
+  const n = a.samples?.length ?? 0
+  expect(n).toBeLessThanOrEqual(120)
+  expect(n).toBeGreaterThan(60)
+  expect(a.samples?.[0]).toEqual(first)
+  expect(a.samples?.[n - 1]?.costUsd).toBe(a.costUsd)
+})
+
+test('capSamples: under the cap unchanged; past it, every second of the older 60 and all the rest', async () => {
+  const upTo = (n: number) => Array.from({ length: n }, (_, i) => i)
+  expect(capSamples(upTo(120))).toEqual(upTo(120))
+  const capped = capSamples(upTo(121))
+  expect(capped.length).toBe(30 + 61)
+  expect(capped.slice(0, 3)).toEqual([0, 2, 4])
+  expect(capped[29]).toBe(58)
+  expect(capped[30]).toBe(60)
+  expect(capped[capped.length - 1]).toBe(120)
+  expect(capSamples([])).toEqual([])
 })
 
 test('errors: a failing call marks its event and counts; a success does not', async ($, on) => {

@@ -81,3 +81,18 @@ test('narrator: closed detail view, no call however busy the agent', async ($, o
 
   expect(calls.length).toBe(0)
 })
+
+test('narrator: quiet while the agent has just spoken for itself', async ($, on) => {
+  on('turn.step', async function* () {
+    return { turnId: 'turn', index: 0, answer: 'Je relance les tests.', toolUses: [], stopReason: 'end_turn', usage: null } as never
+  })
+  const calls = await worker($, on)
+  const stream = ($.turn.step as (e: unknown) => AsyncIterable<unknown>)({ turnId: 'turn', index: 0, model: 'claude-sonnet-5-5', messageCount: 1, agentId: 'a1' })
+  for await (const _ of stream) void _
+
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface: 'terminal', component: 'Pane', requestId: 'savvy-agents', props: pane })
+  await ui.press({ key: 'd-a1' })
+
+  expect(calls).toEqual([])
+  expect(await ui.find({ type: 'Text', text: /Je relance les tests/ })).toBeDefined()
+})

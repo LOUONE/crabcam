@@ -81,12 +81,20 @@ test('charts: W=240 has no NaN or negative widths', async () => {
   expect(h).toBeGreaterThan(0)
 })
 
-test('charts: the sparkline adds height and needs two samples', async () => {
+test('charts: no sparkline, one height whatever the samples', async () => {
   const [, without] = costCurveSvg(400, agent({ samples: FIVE.slice(0, 1) }), T0 + 60_000)
-  const [src, withSpark] = costCurveSvg(400, agent({ samples: FIVE }), T0 + 60_000)
-  expect(src).toContain('stroke="#9a9a96"')
-  expect(withSpark).toBeGreaterThan(without)
-  expect(src).toContain(`height="${withSpark}"`)
+  const [src, withSamples] = costCurveSvg(400, agent({ samples: FIVE }), T0 + 60_000)
+  expect(src).not.toContain('stroke="#9a9a96"')
+  expect(withSamples).toBe(without)
+  expect(src).toContain(`height="${withSamples}"`)
+})
+
+test('charts: only the 50 % rule is labelled', async () => {
+  const [src] = costCurveSvg(400, agent({ samples: FIVE, costUsd: 0.25 }), T0 + 60_000)
+  // Max sample 0.25: the 50 % label reads $0.13 (0.125), the top rule carries no $0.25 label; the title does.
+  expect((src.match(/\$0\.25/g) ?? []).length).toBe(1)
+  expect(src).toContain('$0.13')
+  expect((src.match(/<line class="ln"/g) ?? []).length).toBe(2)
 })
 
 test('charts: missing samples and endedAt do not throw, data text never leaks unescaped', async () => {

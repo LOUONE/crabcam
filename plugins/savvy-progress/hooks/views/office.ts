@@ -186,7 +186,8 @@ export const officeSvg = (W: number, agents: AgentRun[], at: number): [string, n
     )
     const floor = TOP + ROOM_H - 20
     if (rw >= 90) parts.push(scenery(W, room, x, floor - 12, rw, color))
-    const scale = rw < 110 ? 0.7 : 0.9
+    // Bigger crabs in wider rooms: three sizes by the room's width.
+    const scale = rw >= 130 ? 1.3 : rw >= 110 ? 0.9 : 0.7
     const cy = floor - 26 * scale
     parts.push(crabRow(W, room, inRoom, x + 6, rw - 12, cy, scale, { names: true, nameY: TOP + ROOM_H - 8, maxSlot: Infinity }))
   })

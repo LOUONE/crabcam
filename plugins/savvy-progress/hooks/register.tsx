@@ -1,7 +1,13 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { ActivityEvent, ActivityKind, AgentRun, FileTouch, Flow, Panel, Phase, PlannedTask } from '../types'
+import type { ActivityEvent, ActivityKind, AgentRun, FileTouch, Flow, Panel, PanelView, Phase, PlannedTask } from '../types'
+// The views use this module's helpers only inside their functions, so the two may import each other.
+import { costCurveSvg } from './views/charts'
+import { partySvg, saidSvg } from './views/extras'
+import { conflictBannerSvg, conflictsOf, fileMapSvg } from './views/filemap'
+import { lanesSvg } from './views/lanes'
+import { officeSvg } from './views/office'
 
 const flow = atom({ plugin: 'savvy-progress', key: 'flow' } as const, null)
 const agents = atom({ plugin: 'savvy-progress', key: 'agents' } as const, [])
@@ -31,6 +37,8 @@ const MAX_AFTER = 20
 const MAX_TITLE = 120
 export const ACCENT = '#8f8cf4'
 export const DONE = '#5fbf8f'
+const ERROR_RED = '#D0453F'
+const WARN_AMBER = '#BA7517'
 
 type ProgressInput = {
   title?: string
@@ -740,10 +748,17 @@ const touchFile = (files: FileTouch[], path: string, kind: ActivityKind, at: num
 export const eventsOf = (a: AgentRun): ActivityEvent[] =>
   a.events ?? (a.activity ?? []).map(text => ({ at: a.startedAt, tool: text.split(' ')[0] ?? '', kind: 'other' as const, target: '', text }))
 
+type LogLine = { text: string; isError: boolean }
+
 // The lines a row shows: the last few with the log open, else the latest one of a running agent.
-const logLines = (a: AgentRun, isOpen: boolean): string[] => {
+// A failed call is marked ✗ instead of its kind's glyph.
+const logLines = (a: AgentRun, isOpen: boolean): LogLine[] => {
   const n = isOpen ? LOG_OPEN_LINES : a.status === 'running' ? 1 : 0
-  return n ? eventsOf(a).slice(-n).map(ev => `${KIND_GLYPH[ev.kind]} ${ev.text}`) : []
+  return n
+    ? eventsOf(a)
+        .slice(-n)
+        .map(ev => ({ text: `${ev.isError ? '✗' : KIND_GLYPH[ev.kind]} ${ev.text}`, isError: ev.isError === true }))
+    : []
 }
 
 const idleMs = (a: AgentRun, at: number): number =>
@@ -786,7 +801,11 @@ const narratorSystem = (): string =>
 
 const narrating = new Set<string>()
 
+// The agent's own words are free: while it has spoken in the last minute, the narrator stays quiet.
+const SAID_FRESH_MS = 60_000
+
 const needsNarration = (a: AgentRun, at: number): boolean => {
+  if (a.said && at - a.said.at < SAID_FRESH_MS) return false
   const count = a.eventCount ?? 0
   const done = a.narration?.upTo ?? 0
   if (count - done < (a.narration ? NARRATE_AFTER : 1)) return false
@@ -1091,7 +1110,7 @@ export const ctxOf = (a: AgentRun): number => (a.contextMax ? Math.min(100, Math
 
 const agentH = (lines: number): number => 66 + (lines ? lines * LOG_LINE + 4 : 0)
 
-const agentSvg = (W: number, a: AgentRun, at: number, lines: string[], said = ''): string => {
+const agentSvg = (W: number, a: AgentRun, at: number, lines: LogLine[], said = ''): string => {
   const H = agentH(lines.length + (said ? 1 : 0))
   const idle = idleMs(a, at)
   const s = tr()
@@ -1110,11 +1129,12 @@ const agentSvg = (W: number, a: AgentRun, at: number, lines: string[], said = ''
   // Without reported steps the bar falls back to the context, drawn grey.
   const fillW = Math.round(barW * (progress ?? ctx / 100))
   const log = lines
-    .map((text, i) => {
+    .map(({ text, isError }, i) => {
       const isLast = i === lines.length - 1
       const y = 73 + (i + (said ? 1 : 0)) * LOG_LINE
       const tail = isLast && idle > IDLE_MS ? `<tspan fill="#D0833A">  ⏸ ${s.idle} ${fmtTime(idle)}</tspan>` : ''
-      return `<text class="${isLast ? 't' : 'm'}" ${startText(W, TEXT_X, y)} font-family="${FONT}" font-size="11">${xml(fitText(text, 11, textW - 90))}${tail}</text>`
+      const look = isError ? `fill="${ERROR_RED}"` : `class="${isLast ? 't' : 'm'}"`
+      return `<text ${look} ${startText(W, TEXT_X, y)} font-family="${FONT}" font-size="11">${xml(fitText(text, 11, textW - 90))}${tail}</text>`
     })
     .join('\n')
   const saidLine = said ? `<text class="s" ${startText(W, TEXT_X, 73)} font-family="${FONT}" font-size="11" font-style="italic">${xml(fitText(said, 11, textW))}</text>` : ''
@@ -1123,7 +1143,7 @@ const agentSvg = (W: number, a: AgentRun, at: number, lines: string[], said = ''
     H,
     `${rowCrab(W, 0, 14, costumeOf(a.type), false, a.status === 'running')}
 <text class="t" ${startText(W, TEXT_X, 18)} font-family="${FONT}" font-size="13" font-weight="600">${xml(fitText(a.description || a.type, 13, textW))}</text>
-<text ${startText(W, TEXT_X, 34)} font-family="${FONT}" font-size="11"><tspan fill="${color}">${xml(tier === 'other' ? a.type : tierWord(tier))}</tspan><tspan class="s">  ${xml(meta.join('  ·  '))}</tspan></text>
+<text ${startText(W, TEXT_X, 34)} font-family="${FONT}" font-size="11"><tspan fill="${color}">${xml(tier === 'other' ? a.type : tierWord(tier))}</tspan><tspan class="s">  ${xml(meta.join('  ·  '))}</tspan>${a.errorCount ? `<tspan fill="${ERROR_RED}">  ✗ ${a.errorCount}</tspan>` : ''}${a.loop ? `<tspan fill="${WARN_AMBER}">  ↻ ${xml(s.looping)}</tspan>` : ''}</text>
 ${steps && stepsW > 30 ? `<text class="t" ${startText(W, TEXT_X, 49)} font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${xml(fitText(steps, 11, stepsW))}</text>` : ''}
 <text class="s" ${endText(W, TEXT_X + barW, 49, true)} font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">${stats}</text>
 <rect class="k" x="${mx(W, TEXT_X, barW)}" y="55" width="${barW}" height="4" rx="2"/><rect${progress === null ? ' class="m"' : ''} x="${mx(W, TEXT_X, fillW)}" y="55" width="${fillW}" height="4" rx="2"${progress === null ? '' : ` fill="${color}"`}/>
@@ -1186,11 +1206,14 @@ const heroSvg = (W: number, a: AgentRun, at: number): [string, number] => {
     const label = `${KIND_GLYPH[phase.kind]}  ${kindWord(phase.kind)} · ${fmtTime(Math.max(0, at - phase.since))}`
     const pw = Math.round(textWidth(label, 11.5) + 24)
     const last = evs[evs.length - 1]?.text ?? ''
+    // An agent repeating one failing call says so instead of its latest action.
+    const right = a.loop ? `↻ ${s.looping} · ${a.loop.text} ×${a.loop.count}` : last
+    const rightLook = a.loop ? `fill="${WARN_AMBER}"` : 'class="s"'
     pill =
       `<rect${a.status === 'running' ? ' class="live"' : ''} x="${mx(W, 72, pw)}" y="60" width="${pw}" height="24" rx="12" fill="${KIND_COLOR[phase.kind]}" opacity="0.22"/>` +
       `<rect x="${mx(W, 72, pw)}" y="60" width="${pw}" height="24" rx="12" fill="none" stroke="${KIND_COLOR[phase.kind]}" stroke-width="1.2"/>` +
       `<text ${startText(W, 84, 76)} font-family="${FONT}" font-size="11.5" font-weight="600" fill="${KIND_COLOR[phase.kind]}">${xml(label)}</text>` +
-      `<text class="s" ${startText(W, 72 + pw + 10, 76)} font-family="${FONT}" font-size="11.5">${xml(fitText(last, 11.5, Math.max(40, W - 72 - pw - 28)))}</text>`
+      `<text ${rightLook} ${startText(W, 72 + pw + 10, 76)} font-family="${FONT}" font-size="11.5">${xml(fitText(right, 11.5, Math.max(40, W - 72 - pw - 28)))}</text>`
   }
   const stats: [string, string][] = [
     [s.time, fmtTime(elapsed(a, at))],
@@ -1198,11 +1221,13 @@ const heroSvg = (W: number, a: AgentRun, at: number): [string, number] => {
     [s.actions, String(a.eventCount ?? evs.length)],
     [s.ctx, `${ctxOf(a)}%`],
   ]
+  if (a.errorCount) stats.push([s.errors, String(a.errorCount)])
   const colW = (W - 72 - 16) / stats.length
   const statRow = stats
-    .map(([k, v], i) =>
-      `<text ${startText(W, 72 + i * colW, 104)} font-family="${FONT}" font-size="11"><tspan class="m">${xml(k)} </tspan><tspan class="t" font-weight="600" font-variant-numeric="tabular-nums">${xml(v)}</tspan></text>`,
-    )
+    .map(([k, v], i) => {
+      const value = k === s.errors && i === 4 ? `fill="${ERROR_RED}"` : 'class="t"'
+      return `<text ${startText(W, 72 + i * colW, 104)} font-family="${FONT}" font-size="11"><tspan class="m">${xml(k)} </tspan><tspan ${value} font-weight="600" font-variant-numeric="tabular-nums">${xml(v)}</tspan></text>`
+    })
     .join('')
   const body =
     `<rect x="${mx(W, 0, 4)}" y="14" width="4" height="${H - 28}" rx="2" fill="${color}"/>` +
@@ -1241,7 +1266,10 @@ const progressSvg = (W: number, evs: ActivityEvent[]): [string, number] => {
   const step = 10
   const shown = evs.slice(-Math.max(1, Math.floor((W - 32) / step)))
   const blocks = shown
-    .map((ev, i) => `<rect${i === shown.length - 1 ? ' class="live"' : ''} x="${mx(W, 16 + i * step, 8)}" y="36" width="8" height="20" rx="2.5" fill="${KIND_COLOR[ev.kind]}"/>`)
+    .map(
+      (ev, i) =>
+        `<rect${i === shown.length - 1 ? ' class="live"' : ''} x="${mx(W, 16 + i * step, 8)}" y="36" width="8" height="20" rx="2.5" fill="${KIND_COLOR[ev.kind]}"${ev.isError ? ` stroke="${ERROR_RED}" stroke-width="1.5"` : ''}/>`,
+    )
     .join('')
   let x = 16
   const legend = kindCounts(evs)
@@ -1321,8 +1349,8 @@ const timelineSvg = (W: number, evs: ActivityEvent[], startedAt: number, total: 
       const isNow = i === 0 && isRunning
       return (
         `<text class="m" ${endText(W, 56, y + 4)} font-family="${FONT}" font-size="11" font-variant-numeric="tabular-nums">+${fmtTime(Math.max(0, ev.at - startedAt))}</text>` +
-        `<circle${isNow ? ' class="live"' : ''} cx="${lineX}" cy="${y}" r="${isNow ? 6 : 4.5}" fill="${KIND_COLOR[ev.kind]}"/>` +
-        `<text class="${i === 0 ? 't' : 's'}" ${startText(W, 86, y + 4)} font-family="${FONT}" font-size="12"${i === 0 ? ' font-weight="600"' : ''}>${xml(fitText(ev.text, 12, W - 86 - 16))}</text>`
+        `<circle${isNow ? ' class="live"' : ''} cx="${lineX}" cy="${y}" r="${isNow ? 6 : 4.5}" fill="${ev.isError ? ERROR_RED : KIND_COLOR[ev.kind]}"/>` +
+        `<text ${ev.isError ? `fill="${ERROR_RED}"` : `class="${i === 0 ? 't' : 's'}"`} ${startText(W, 86, y + 4)} font-family="${FONT}" font-size="12"${i === 0 ? ' font-weight="600"' : ''}>${xml(fitText(`${ev.isError ? '✗ ' : ''}${ev.text}`, 12, W - 86 - 16))}</text>`
       )
     })
     .join('')
@@ -1430,6 +1458,14 @@ async function autoOpen($: EngineInterface, key: string): Promise<void> {
 const MAX_THOUGHTS = 6
 const MAX_SAMPLES = 120
 const LOOP_MIN = 3
+
+// Adds a sample; past MAX_SAMPLES, the older half is thinned to every second sample so
+// a long run keeps its start (the curve stays whole, only coarser where it is oldest).
+export const capSamples = <T,>(list: T[]): T[] => {
+  if (list.length <= MAX_SAMPLES) return list
+  const half = Math.floor(MAX_SAMPLES / 2)
+  return [...list.slice(0, half).filter((_, i) => i % 2 === 0), ...list.slice(half)]
+}
 
 // The agent's own words of one model request: whitespace collapsed, clipped; '' when it said nothing.
 const saidOf = (answer: unknown): string => (typeof answer === 'string' ? clip(answer.replace(/\s+/g, ' ').trim(), 400) : '')
@@ -1593,7 +1629,11 @@ export const register: Register = (on, options) => {
         // A `{ deny }` carries no isError: not counted as a failure.
         const isError = (result as { isError?: boolean }).isError === true
         const done = ref
-        await update($, agents, list => list.map((a): AgentRun => (a.agentId !== agentId ? a : withOutcome(a, done, isError))))
+        // A success only matters while the agent is looping (it ends the loop): else no write, no redraw.
+        const isLooping = (await read($, agents)).some(a => a.agentId === agentId && a.loop)
+        if (isError || isLooping) {
+          await update($, agents, list => list.map((a): AgentRun => (a.agentId !== agentId ? a : withOutcome(a, done, isError))))
+        }
       } catch {
         // Bookkeeping only: the call's result goes back untouched.
       }
@@ -1694,54 +1734,59 @@ export const register: Register = (on, options) => {
   // Each model request of a subagent: live context, tokens and cost.
   on('turn.step', async function* ($, e, next) {
     const result = yield* next(e)
-    const agentId = e.agentId
-    const usage = result.usage
-    const text = saidOf(result.answer)
-    if (!agentId || (!usage && !text)) return result
+    // Bookkeeping only: whatever fails here must never break the agent's model request.
+    try {
+      const agentId = e.agentId
+      const usage = result.usage
+      const text = saidOf(result.answer)
+      if (!agentId || (!usage && !text)) return result
 
-    const at = await $.clock.now()
-    const said = text ? { text, at } : undefined
-    // The agent's own words, even on a step that reports no usage.
-    const withSaid = (a: AgentRun): AgentRun =>
-      said ? { ...a, said, thoughts: [...(a.thoughts ?? []), said].slice(-MAX_THOUGHTS) } : a
-    if (!usage) {
-      await update($, agents, list => list.map((a): AgentRun => (a.agentId !== agentId ? a : withSaid(a))))
-      return result
+      const at = await $.clock.now()
+      const said = text ? { text, at } : undefined
+      // The agent's own words, even on a step that reports no usage.
+      const withSaid = (a: AgentRun): AgentRun =>
+        said ? { ...a, said, thoughts: [...(a.thoughts ?? []), said].slice(-MAX_THOUGHTS) } : a
+      if (!usage) {
+        await update($, agents, list => list.map((a): AgentRun => (a.agentId !== agentId ? a : withSaid(a))))
+        return result
+      }
+
+      const model = usage.model || e.model
+      // Cost and context after this step, kept as a sample for the curves.
+      const withSample = (a: AgentRun): AgentRun => ({
+        ...a,
+        samples: capSamples([...(a.samples ?? []), { at, costUsd: a.costUsd, ctx: ctxOf(a) }]),
+      })
+      await update($, agents, list =>
+        list.map((a): AgentRun =>
+          a.agentId !== agentId
+            ? a
+            : withSample(withSaid({
+                ...a,
+                model,
+                effort: typeof e.effort === 'string' ? e.effort : a.effort,
+                status: 'running',
+                endedAt: undefined,
+                contextTokens:
+                  (usage.input_tokens || 0) +
+                  (usage.cache_read_input_tokens || 0) +
+                  (usage.cache_creation_input_tokens || 0) +
+                  (usage.output_tokens || 0),
+                contextMax: windowOf(model),
+                tokens:
+                  a.tokens +
+                  (usage.input_tokens || 0) +
+                  (usage.output_tokens || 0) +
+                  (usage.cache_read_input_tokens || 0) +
+                  (usage.cache_creation_input_tokens || 0),
+                costUsd: a.costUsd + costOf(model, usage, true),
+                steps: a.steps + 1,
+              })),
+        ),
+      )
+    } catch {
+      // The panel misses one step; the next one catches up.
     }
-
-    const model = usage.model || e.model
-    // Cost and context after this step, kept as a sample for the curves.
-    const withSample = (a: AgentRun): AgentRun => ({
-      ...a,
-      samples: [...(a.samples ?? []), { at, costUsd: a.costUsd, ctx: ctxOf(a) }].slice(-MAX_SAMPLES),
-    })
-    await update($, agents, list =>
-      list.map((a): AgentRun =>
-        a.agentId !== agentId
-          ? a
-          : withSample(withSaid({
-              ...a,
-              model,
-              effort: typeof e.effort === 'string' ? e.effort : a.effort,
-              status: 'running',
-              endedAt: undefined,
-              contextTokens:
-                (usage.input_tokens || 0) +
-                (usage.cache_read_input_tokens || 0) +
-                (usage.cache_creation_input_tokens || 0) +
-                (usage.output_tokens || 0),
-              contextMax: windowOf(model),
-              tokens:
-                a.tokens +
-                (usage.input_tokens || 0) +
-                (usage.output_tokens || 0) +
-                (usage.cache_read_input_tokens || 0) +
-                (usage.cache_creation_input_tokens || 0),
-              costUsd: a.costUsd + costOf(model, usage, true),
-              steps: a.steps + 1,
-            })),
-      ),
-    )
     return result
   })
 
@@ -1831,6 +1876,8 @@ export const register: Register = (on, options) => {
     const detailButton = (a: AgentRun) => <Button key={`d-${a.id}`} label={`${s.details} ›`} plain onPress={() => open(a.id)} />
     const said = (a: AgentRun): string => (a.narration ? `« ${a.narration.text} »` : '')
     const sel = p.selected ? list.find(a => a.id === p.selected) : undefined
+    // The end of a flow: every agent finished and the flow closed.
+    const isParty = f !== null && f.isFinished && list.length > 0 && !list.some(a => a.status === 'running')
 
     // One agent up close: what it is on, the narrator's sentence, its files and its calls.
     if (sel) {
@@ -1848,12 +1895,15 @@ export const register: Register = (on, options) => {
         const card = (key: string, [source, height]: [string, number], alt: string) => (
           <Svg key={key} source={source} alt={alt} width={W} height={height} />
         )
+        const saidCard = saidSvg(W, sel, at)
         return (
           <Box flexDirection="column" gap={1}>
             {back}
             {card('hero', heroSvg(W, sel, at), `${sel.description}: ${runModel(sel)}${phase ? ', ' + kindWord(phase.kind) : ''}`)}
+            {saidCard[0] ? card('said', saidCard, `${s.said}: ${sel.said?.text ?? ''}`) : null}
             {narratorMode() !== 'off' && (narr || isNarrating) ? card('narr', narrationSvg(W, sel, at, isNarrating), narr?.text ?? s.narrating) : null}
             {evs.length > 0 ? card('progress', progressSvg(W, evs), kindCounts(evs).map(([k, n]) => `${kindWord(k)} ${n}`).join(', ')) : null}
+            {card('cost', costCurveSvg(W, sel, at), `${s.costCurve}: ≈${fmtCost(sel.costUsd)}, ${s.ctx} ${ctxOf(sel)}%`)}
             {card('files', filesSvg(W, files, at, sel.status === 'running'), `${s.files}: ${files.map(fl => baseOf(fl.path)).join(', ')}`)}
             {evs.length > 0 ? card('timeline', timelineSvg(W, timeline, sel.startedAt, sel.eventCount ?? evs.length, sel.status === 'running'), `${s.timeline}: ${timeline[0]?.text ?? ''}`) : null}
           </Box>
@@ -1884,6 +1934,21 @@ export const register: Register = (on, options) => {
           ) : (
             <Text key="now" dimColor>{s.empty}</Text>
           )}
+          {sel.loop ? (
+            <Text key="loop" color="yellow" wrap="truncate-end">
+              ↻ {s.looping} · {sel.loop.text} ×{sel.loop.count}
+            </Text>
+          ) : null}
+          {sel.errorCount ? (
+            <Text key="errors" color="red">
+              ✗ {sel.errorCount} {s.errors}
+            </Text>
+          ) : null}
+          {sel.said?.text ? (
+            <Text key="said" wrap="wrap">
+              {s.said}: {sel.said.text}
+            </Text>
+          ) : null}
           {narratorMode() !== 'off' && (narr || isNarrating) ? (
             <Box key="narr" flexDirection="column">
               {narr ? (
@@ -1932,13 +1997,20 @@ export const register: Register = (on, options) => {
             <Text bold>
               {s.timeline} · {sel.eventCount ?? evs.length}
             </Text>
-            {timeline.map((ev, i) => (
-              <Text key={`${ev.at}-${i}`} wrap="truncate-end" dimColor={i > 0}>
-                <Text dimColor tabular>+{fmtTime(Math.max(0, ev.at - sel.startedAt))} </Text>
-                <Text color={KIND_COLOR[ev.kind]}>{KIND_GLYPH[ev.kind]} </Text>
-                {ev.text}
-              </Text>
-            ))}
+            {timeline.map((ev, i) =>
+              ev.isError ? (
+                <Text key={`${ev.at}-${i}`} wrap="truncate-end" color="red">
+                  <Text dimColor tabular>+{fmtTime(Math.max(0, ev.at - sel.startedAt))} </Text>
+                  ✗ {ev.text}
+                </Text>
+              ) : (
+                <Text key={`${ev.at}-${i}`} wrap="truncate-end" dimColor={i > 0}>
+                  <Text dimColor tabular>+{fmtTime(Math.max(0, ev.at - sel.startedAt))} </Text>
+                  <Text color={KIND_COLOR[ev.kind]}>{KIND_GLYPH[ev.kind]} </Text>
+                  {ev.text}
+                </Text>
+              ),
+            )}
           </Box>
         </Box>
       )
@@ -1964,11 +2036,55 @@ export const register: Register = (on, options) => {
           </Box>
         )
       }
+      const view: PanelView = p.view ?? 'list'
+      const VIEWS: [PanelView, string][] = [
+        ['list', s.viewList],
+        ['lanes', s.viewLanes],
+        ['office', s.viewOffice],
+        ['files', s.viewFiles],
+      ]
+      const tabs = (
+        <Box key="tabs" flexDirection={isRtl() ? 'row-reverse' : 'row'} gap={1}>
+          {VIEWS.map(([v, word]) => (
+            <Button key={`v-${v}`} label={v === view ? `● ${word}` : word} plain onPress={() => update($, panel, prev => ({ ...prev, view: v }))} />
+          ))}
+        </Box>
+      )
+      const header = <Svg key="header" source={headerSvg(W, title, t)} alt={title ? `${title}: ${summary}` : summary} width={W} height={headerHeight(title)} />
+      const [bannerSrc, bannerH] = conflictBannerSvg(W, list, at)
+      const banner = bannerSrc ? (
+        <Svg key="conflicts" source={bannerSrc} alt={`${s.conflict}: ${conflictsOf(list).map(c => baseOf(c.path)).join(', ')}`} width={W} height={bannerH} />
+      ) : null
+
+      // Lanes, office and file map: one drawing each, no grid behind it.
+      if (view !== 'list') {
+        const [source, viewH] = view === 'lanes' ? lanesSvg(W, list, at) : view === 'office' ? officeSvg(W, list, at) : fileMapSvg(W, list, at)
+        const word = VIEWS.find(([v]) => v === view)?.[1] ?? view
+        return (
+          <Box flexDirection="column" alignItems={align}>
+            {header}
+            {tabs}
+            {toggleCompact}
+            {banner}
+            <Svg key="view" source={source} alt={`${word}: ${list.length} ${s.agentsCount}`} width={W} height={viewH} />
+          </Box>
+        )
+      }
+
+      const [partySrc, partyH] = isParty ? partySvg(W, list, at) : ['', 0]
+      const party = partySrc ? <Svg key="party" source={partySrc} alt={`${s.allDone}: ${list.length} ${s.agentsCount}, ${summary}`} width={W} height={partyH} /> : null
       const isLog = p.isLogOpen === true
       const rowH = (a: AgentRun): number => agentH(logLines(a, isLog).length + (said(a) ? 1 : 0))
       const shownDone = p.isDoneCollapsed ? [] : finished
-      const lines = 1 + (isEmpty ? 1 : 0) + (running.length > 0 ? 1 : 0) + (finished.length > 0 ? 1 : 0) + (planned.length > 0 ? 1 : 0)
-      const gridH = headerHeight(title) + lines * LINE_H + [...running, ...shownDone].reduce((h, a) => h + rowH(a) + LINE_H, 0) + planned.length * 54
+      // Text and Button rows: the tabs, the buttons and the section heads.
+      const lines = 2 + (isEmpty ? 1 : 0) + (running.length > 0 ? 1 : 0) + (finished.length > 0 ? 1 : 0) + (planned.length > 0 ? 1 : 0)
+      const gridH =
+        headerHeight(title) +
+        partyH +
+        bannerH +
+        lines * LINE_H +
+        [...running, ...shownDone].reduce((h, a) => h + rowH(a) + LINE_H, 0) +
+        planned.length * 54
       return (
         <Box flexDirection="column">
           {/* The grid sizes the pane; the content is placed over it, as an
@@ -1977,9 +2093,12 @@ export const register: Register = (on, options) => {
             <Svg key={`grid-${i}`} source={gridSvg(W, tileH)} alt="dotted grid" width={W} height={tileH} />
           ))}
           <Box flexDirection="column" position="absolute" top={0} left={0} right={0} alignItems={align}>
-            <Svg source={headerSvg(W, title, t)} alt={title ? `${title}: ${summary}` : summary} width={W} height={headerHeight(title)} />
+            {header}
+            {tabs}
+            {party}
             {toggleCompact}
             {toggleLog}
+            {banner}
             {isEmpty && <Text dimColor>{s.empty}</Text>}
             {running.length > 0 && section('h-run', `${s.running} · ${running.length}`)}
             {running.flatMap(a => [
@@ -2002,6 +2121,10 @@ export const register: Register = (on, options) => {
     }
 
     // Terminal: the same content in text rows.
+    const nameById = new Map(list.map(a => [a.id, a.description || a.type] as const))
+    const conflictLines = conflictsOf(list)
+      .slice(0, 4)
+      .map(c => `⚠ ${s.conflict}: ${baseOf(c.path)} — ${c.agents.map(id => nameById.get(id) ?? id).join(' · ')}`)
     const cols = Math.max(24, e.props.bodyColumns || 40)
     const barW = Math.max(6, Math.min(20, cols - 34))
     const row = (a: AgentRun) => {
@@ -2024,6 +2147,8 @@ export const register: Register = (on, options) => {
             {'  '}
             {tier === 'other' ? a.type : tierWord(tier)} · {model}
             {a.round > 1 ? ` · ${s.round} ${a.round}` : ''}
+            {a.errorCount ? <Text color="red">{`  ✗ ${a.errorCount}`}</Text> : null}
+            {a.loop ? <Text color="yellow">{`  ↻ ${s.looping}`}</Text> : null}
           </Text>
           <Text wrap="truncate-end">
             {'  '}
@@ -2042,9 +2167,9 @@ export const register: Register = (on, options) => {
           {logLines(a, p.isLogOpen === true).map((line, i, all) => {
             const idle = i === all.length - 1 ? idleMs(a, at) : 0
             return (
-              <Text key={`log-${i}`} dimColor={i < all.length - 1} wrap="truncate-end">
+              <Text key={`log-${i}`} dimColor={!line.isError && i < all.length - 1} color={line.isError ? 'red' : undefined} wrap="truncate-end">
                 {'  '}
-                {line}
+                {line.text}
                 {idle > IDLE_MS ? <Text color="yellow">{`  ⏸ ${s.idle} ${fmtTime(idle)}`}</Text> : null}
               </Text>
             )
@@ -2083,6 +2208,12 @@ export const register: Register = (on, options) => {
           </Text>
         ) : (
           <Box flexDirection="column" marginTop={1}>
+            {isParty ? <Text key="party" color="green">✓ {s.allDone}</Text> : null}
+            {conflictLines.map((line, i) => (
+              <Text key={`conflict-${i}`} color="yellow" wrap="truncate-end">
+                {line}
+              </Text>
+            ))}
             {isEmpty && <Text dimColor>{s.empty}</Text>}
             {running.length > 0 && <Text dimColor>{s.running} · {running.length}</Text>}
             {running.map(row)}

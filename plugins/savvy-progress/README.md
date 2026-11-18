@@ -11,9 +11,20 @@ The panel shows what each subagent is actually doing, read from Claude Code's ow
 
 - **In the list**, a running agent shows its latest action (`▶ Bash npm test`, `◎ Read src/foo.ts`), `⏸ idle 1:20` after a minute without a call, and the narrator's latest sentence once there is one. **Log** shows the last four actions of every row.
 - **Details ›** under an agent opens it up close: its phase now (◎ exploring, ✎ editing, ▶ running, ◍ web, ⇢ delegating) and for how long, a strip of every call coloured by kind, the files it read or edited (how often, how long ago, the one in use pulsing), and its timeline. On the desktop these are drawn as cards; the terminal shows the same as text.
-- **The narrator** writes one sentence on what the open agent is doing and why ("It fixes the parser in foo.ts, then reruns the tests."). It is one Haiku 5.5 call at low effort, about 1K tokens in and 50 out (≈ $0.0001), made only for the agent open in Details, at most every 15 seconds and only after 3 new calls. Its running cost shows under the sentence. `narrator: off` turns it off, and the panel then costs no tokens at all; `all` narrates every agent.
+- **The narrator** writes one sentence on what the open agent is doing and why ("It fixes the parser in foo.ts, then reruns the tests."). It is one Haiku 5.5 call at low effort, about 1K tokens in and 50 out (≈ $0.0001), made only for the agent open in Details, at most every 15 seconds and only after 3 new calls. Its running cost shows under the sentence. It also stays quiet while the agent has spoken for itself in the last minute (see "in its own words" below), since that sentence is free. `narrator: off` turns it off, and the panel then costs no tokens at all; `all` narrates every agent.
 
 Self-reported steps (the `step` tool and the line added to each worker's brief) cost a tool call per step, so they are **off** by default; `stepReports: on` brings them back.
+
+## Views (1.6.0)
+
+Everything below is drawn from Claude Code's own events (tool calls, model requests and their results) and costs no tokens.
+
+- **Four tabs** on the desktop, under the totals: **List** (the rows above), **Lanes** (one lane per agent along a shared time axis, coloured by what it was doing), **Office** (each running agent's crab stands in the room of its current phase: the library for reading and the web, the workshop for editing, the lab for running; the others wait in the lounge) and **File map** (every file any agent touched, as a tree, with who read or edited it).
+- **In its own words**: Details shows the agent's own latest sentence, written between two tool calls, with a few earlier ones. It is free, taken from the agent itself; the narrator stays optional.
+- **Errors in red**: a failed call is marked ✗ in the list, the log and the timeline, and the row counts them. Three identical failing calls in a row show the **going in circles** warning (↻), in the row and in Details.
+- **Conflicts**: a file edited by two agents whose work overlapped in time is flagged above the list and the views (on the terminal, one line per file).
+- **Cost and context**: in Details, the agent's cost over time as a curve, and how full its context is.
+- **The party**: when the flow is finished and every agent is done, the crabs celebrate at the top of the list.
 
 ## Tools it adds
 

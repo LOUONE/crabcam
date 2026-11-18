@@ -72,6 +72,7 @@ export const saidSvg = (W: number, a: AgentRun, at: number): [string, number] =>
 
 const PARTY_H = 132
 const PARTY_SCALE = 0.9
+const PARTY_BIG = 1.2
 const FLOOR = 120
 const CONFETTI = 26
 
@@ -107,9 +108,11 @@ export const partySvg = (W: number, agents: AgentRun[], at: number): [string, nu
 
   // The crabs, oldest first; when they do not all fit, as many as fit then "+N".
   const list = [...agents].sort((x, y) => x.startedAt - y.startedAt)
-  const cw = crabWidth(PARTY_SCALE)
+  // Bigger crabs when all of them fit at that size; else the smaller ones and "+N".
+  const scale = list.length * (crabWidth(PARTY_BIG) + 6) <= inner + 6 ? PARTY_BIG : PARTY_SCALE
+  const cw = crabWidth(scale)
   const slot = cw + 6
-  const cy = Math.round((FLOOR - 28 * PARTY_SCALE) * 100) / 100
+  const cy = Math.round((FLOOR - 28 * scale) * 100) / 100
   let shown = list
   let more = ''
   let rowW = inner
@@ -126,7 +129,7 @@ export const partySvg = (W: number, agents: AgentRun[], at: number): [string, nu
     .map((a, i) => {
       const x = Math.round((PAD + i * step + Math.max(0, step - cw) / 2) * 100) / 100
       const isFailed = a.status === 'failed'
-      const g = crab(mx(W, x, cw), cy, costumeOf(a.type), isFailed, false, PARTY_SCALE, rtl)
+      const g = crab(mx(W, x, cw), cy, costumeOf(a.type), isFailed, false, scale, rtl)
       return isFailed ? `<g>${g}</g>` : `<g class="hop" style="animation-delay:-${secs((i * 0.125) % 1)}">${g}</g>`
     })
     .join('')
