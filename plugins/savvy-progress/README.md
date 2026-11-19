@@ -24,7 +24,7 @@ Everything below is drawn from Claude Code's own events (tool calls, model reque
 - **Errors in red**: a failed call is marked ✗ in the list, the log and the timeline, and the row counts them. Three identical failing calls in a row show the **going in circles** warning (↻), in the row and in Details.
 - **Conflicts**: a file edited by two agents whose work overlapped in time is flagged above the list and the views (on the terminal, one line per file).
 - **Cost and context**: in Details, the agent's cost over time as a curve, and how full its context is.
-- **The party**: when the flow is finished and every agent is done, the crabs line up at the top of the list under confetti that falls once.
+- **The party**: when the flow is finished and every agent is done, a card at the top of the list shows the totals and the crabs lined up. It does not move.
 
 ## Tools it adds
 

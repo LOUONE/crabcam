@@ -69,14 +69,11 @@ test('party: nothing for an empty list', async () => {
   expect(partySvg(400, [], 60_000)).toEqual(['', 0])
 })
 
-test('party: one still crab per agent, 16 confetti, reduced motion', async () => {
+test('party: one still crab per agent, no animation at all', async () => {
   const [src, h] = partySvg(400, [run(0), run(1), run(2)], 60_000)
   expect(h).toBe(132)
   expect(count(src, /class="c-/g)).toBe(3)
-  expect(src).not.toMatch(/class="hop"|@keyframes hop/)
-  expect(count(src, /class="cf"/g)).toBe(16)
-  expect(count(src, /width="4" height="7" rx="1"/g)).toBe(16)
-  expect(src).toMatch(/prefers-reduced-motion: reduce\)\{\.cf\{animation:none/)
+  expect(src).not.toMatch(/class="(hop|cf)"|@keyframes (hop|fall)/)
 })
 
 test('party: a failed agent still stands with the others', async () => {
@@ -96,26 +93,10 @@ test('party: W=240 has no NaN or negative width', async () => {
   expect(src).not.toMatch(/width="-/)
 })
 
-test('party: confetti falls once, delays not negative at the start', async () => {
-  const [src] = partySvg(400, [run(0), run(1), run(2)], 60_000)
-  expect(src).toMatch(/\.cf\{animation:fall 2\.4s linear 1 both/)
-  expect(src).not.toMatch(/\.cf\{[^}]*infinite/)
-  expect(src).not.toMatch(/style="animation-delay:-/)
-})
-
-test('party: a redraw mid-way resumes the fall instead of replaying it', async () => {
-  const [a] = partySvg(400, [run(0)], 60_000, 0)
-  const [b] = partySvg(400, [run(0)], 60_000, 1000)
-  const delays = (src: string) => [...src.matchAll(/class="cf" style="animation-delay:(-?[\d.]+)s"/g)].map(m => Number(m[1]))
-  expect(delays(b).length).toBe(16)
-  delays(b).forEach((d, i) => expect(Math.abs(d - ((delays(a)[i] ?? 0) - 1))).toBeLessThan(0.002))
-})
-
 test('party: once over, the drawing holds no animation of its own', async () => {
   for (const elapsed of [PARTY_MS, PARTY_MS + 1, 600_000]) {
     const [src, h] = partySvg(400, [run(0), run(1), run(2)], 60_000, elapsed)
-    expect(count(src, /class="cf"/g)).toBe(0)
-    expect(src).not.toMatch(/@keyframes fall/)
+    expect(src).not.toMatch(/class="cf"|@keyframes fall/)
     expect(count(src, /class="c-/g)).toBe(3)
     expect(h).toBe(132)
   }

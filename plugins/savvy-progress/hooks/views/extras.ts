@@ -1,9 +1,7 @@
 import type { AgentRun } from '../../types'
 import {
-  ACCENT,
   DONE,
   FONT,
-  KIND_COLOR,
   cardSvg,
   cardTitle,
   colorOf,
@@ -16,7 +14,6 @@ import {
   fmtTokens,
   isRtl,
   mx,
-  noise,
   startText,
   textWidth,
   tierOf,
@@ -74,45 +71,21 @@ const PARTY_H = 132
 const PARTY_SCALE = 0.9
 const PARTY_BIG = 1.2
 const FLOOR = 120
-const CONFETTI = 16
-// The whole celebration, in ms: one fall of confetti (2.4 s + 1.2 s of stagger). Past it the
-// drawing holds no animation at all. The crabs stand still throughout.
+// Kept for callers that time the party; the card itself no longer animates.
 export const PARTY_MS = 3600
 
-const PARTY_CSS = `<style>
-/* Confetti falls once and is gone. */
-.cf{animation:fall 2.4s linear 1 both;will-change:transform,opacity}
-@keyframes fall{0%{transform:translateY(-12px);opacity:0}12%{opacity:1}80%{opacity:1}100%{transform:translateY(100px);opacity:0}}
-@media (prefers-reduced-motion: reduce){.cf{animation:none;opacity:.7}}
-</style>`
 
-const secs = (n: number): string => `${+n.toFixed(3)}s`
-
-// The end-of-flow celebration: the crabs line up, still, under confetti that falls once.
-// The panel redraws now and then, and a redrawn SVG starts its CSS animations over. So the
-// drawing is told how long the party has been going (`elapsedMs`): each confetti's delay is
-// shifted back by it, which resumes the fall where it was, and once the party is over the
-// drawing carries no animation at all, so nothing can start again.
+// The end-of-flow card: the crabs lined up, still, under the totals. No animation at all,
+// so a redraw of the panel can never replay or stutter anything.
 export const partySvg = (W: number, agents: AgentRun[], at: number, elapsedMs = 0): [string, number] => {
   if (!agents.length) return ['', 0]
-  const isOver = !(elapsedMs < PARTY_MS)
-  const gone = Math.max(0, elapsedMs) / 1000
+  void elapsedMs
   const s = tr()
   const H = PARTY_H
   const rtl = isRtl()
   const t = totals(agents, at)
   const inner = Math.max(0, W - PAD - 16)
   const sub = `${agents.length} ${s.agentsCount} · ${fmtTime(t.time)} · ≈${fmtCost(t.cost)} · ${fmtTokens(t.tokens)} ${s.tokensWord}`
-
-  // Confetti, deterministic, clipped to the card. The rotation sits on the rect so the
-  // CSS transform of the falling group does not replace it.
-  const colors = [...Object.values(KIND_COLOR), ACCENT, DONE]
-  const confetti = isOver ? '' : Array.from({ length: CONFETTI }, (_, i) => {
-    const x = Math.round((6 + noise(i, 1) * Math.max(0, W - 16)) * 10) / 10
-    const y = Math.round(noise(i, 2) * 60 * 10) / 10
-    const r = Math.round(noise(i, 4) * 360)
-    return `<g class="cf" style="animation-delay:${secs(noise(i, 3) * 1.2 - gone)}"><rect x="${x}" y="${y}" width="4" height="7" rx="1" fill="${colors[i % colors.length]}" transform="rotate(${r} ${x + 2} ${y + 3.5})"/></g>`
-  }).join('')
 
   // The crabs, oldest first; when they do not all fit, as many as fit then "+N".
   const list = [...agents].sort((x, y) => x.startedAt - y.startedAt)
@@ -143,9 +116,6 @@ export const partySvg = (W: number, agents: AgentRun[], at: number, elapsedMs = 
     .join('')
 
   const body =
-    (isOver ? '' : PARTY_CSS) +
-    `<defs><clipPath id="pc"><rect x="0.5" y="0.5" width="${W - 1}" height="${H - 1}" rx="12"/></clipPath></defs>` +
-    `<g clip-path="url(#pc)">${confetti}</g>` +
     `<rect x="${mx(W, 0, 4)}" y="14" width="4" height="${H - 28}" rx="2" fill="${DONE}"/>` +
     `<text class="t" ${startText(W, PAD, 28)} font-family="${FONT}" font-size="15" font-weight="700">${xml(fitText(s.allDone, 15, inner))}</text>` +
     `<text class="s" ${startText(W, PAD, 46)} font-family="${FONT}" font-size="11.5">${xml(fitText(sub, 11.5, inner))}</text>` +
